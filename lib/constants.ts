@@ -1,0 +1,210 @@
+/**
+ * Single source of truth for every value stored as a plain `String` in the database.
+ *
+ * SQLite does not support Prisma `enum`, so `role`, `statut`, `priorite` and
+ * `typePanne` are `String` columns. The allowed values live here as `as const`
+ * tuples, the TypeScript types are derived from them, and every write path
+ * validates against them (zod uses `z.enum(STATUTS)` and friends).
+ *
+ * Adding a value = adding it to the tuple AND to its label map. TypeScript
+ * fails the build if a label is missing.
+ */
+
+/* -------------------------------------------------------------------------- */
+/* Roles                                                                      */
+/* -------------------------------------------------------------------------- */
+
+export const ROLES = ["CLIENT", "TECHNICIEN", "SUPERVISEUR"] as const;
+export type Role = (typeof ROLES)[number];
+
+export const ROLE_LABELS: Record<Role, string> = {
+  CLIENT: "Client",
+  TECHNICIEN: "Technicien",
+  SUPERVISEUR: "Superviseur",
+};
+
+/** Page d'accueil de chaque role apres connexion. */
+export const ROLE_ACCUEIL: Record<Role, string> = {
+  CLIENT: "/client/dashboard",
+  TECHNICIEN: "/technicien/dashboard",
+  SUPERVISEUR: "/superviseur/dashboard",
+};
+
+/* -------------------------------------------------------------------------- */
+/* Statuts d'intervention                                                     */
+/* -------------------------------------------------------------------------- */
+
+export const STATUTS = [
+  "NOUVELLE",
+  "ASSIGNEE",
+  "EN_COURS",
+  "TERMINEE",
+  "ANNULEE",
+] as const;
+export type Statut = (typeof STATUTS)[number];
+
+export const STATUT_LABELS: Record<Statut, string> = {
+  NOUVELLE: "Nouvelle",
+  ASSIGNEE: "Assignée",
+  EN_COURS: "En cours",
+  TERMINEE: "Terminée",
+  ANNULEE: "Annulée",
+};
+
+/**
+ * Transitions autorisees. `changerStatut()` (lib/interventions.ts) refuse
+ * tout ce qui n'est pas liste ici.
+ */
+export const TRANSITIONS_STATUT: Record<Statut, readonly Statut[]> = {
+  NOUVELLE: ["ASSIGNEE", "ANNULEE"],
+  ASSIGNEE: ["EN_COURS", "ANNULEE"],
+  EN_COURS: ["TERMINEE", "ANNULEE"],
+  TERMINEE: [],
+  ANNULEE: [],
+};
+
+/**
+ * Une couleur par statut, reutilisee partout : badges, tableaux, graphiques.
+ * `badge` contient des classes Tailwind completes (jamais construites
+ * dynamiquement, sinon Tailwind ne les compile pas). `hex` sert a recharts,
+ * qui prend une couleur brute.
+ */
+export const STATUT_COULEURS: Record<Statut, { hex: string; badge: string }> = {
+  NOUVELLE: {
+    hex: "#64748B", // gris ardoise
+    badge: "bg-slate-100 text-slate-700 border-slate-300",
+  },
+  ASSIGNEE: {
+    hex: "#2563EB", // bleu
+    badge: "bg-blue-50 text-blue-700 border-blue-300",
+  },
+  EN_COURS: {
+    hex: "#F59E0B", // ambre alerte
+    badge: "bg-amber-50 text-amber-800 border-amber-300",
+  },
+  TERMINEE: {
+    hex: "#16A34A", // vert
+    badge: "bg-green-50 text-green-700 border-green-300",
+  },
+  ANNULEE: {
+    hex: "#DC2626", // rouge
+    badge: "bg-red-50 text-red-700 border-red-300",
+  },
+};
+
+/* -------------------------------------------------------------------------- */
+/* Priorites                                                                  */
+/* -------------------------------------------------------------------------- */
+
+export const PRIORITES = ["BASSE", "NORMALE", "HAUTE", "URGENTE"] as const;
+export type Priorite = (typeof PRIORITES)[number];
+
+export const PRIORITE_LABELS: Record<Priorite, string> = {
+  BASSE: "Basse",
+  NORMALE: "Normale",
+  HAUTE: "Haute",
+  URGENTE: "Urgente",
+};
+
+export const PRIORITE_COULEURS: Record<Priorite, { hex: string; badge: string }> = {
+  BASSE: {
+    hex: "#64748B",
+    badge: "bg-slate-100 text-slate-600 border-slate-300",
+  },
+  NORMALE: {
+    hex: "#0B1D3A",
+    badge: "bg-slate-100 text-slate-800 border-slate-400",
+  },
+  HAUTE: {
+    hex: "#F59E0B",
+    badge: "bg-amber-50 text-amber-800 border-amber-300",
+  },
+  URGENTE: {
+    hex: "#DC2626",
+    badge: "bg-red-50 text-red-700 border-red-300",
+  },
+};
+
+/* -------------------------------------------------------------------------- */
+/* Types de panne                                                             */
+/* -------------------------------------------------------------------------- */
+
+export const TYPES_PANNE = [
+  "COUPURE_TOTALE",
+  "DEBIT_FAIBLE",
+  "ONT_DEFECTUEUX",
+  "CABLE_ENDOMMAGE",
+  "NOUVELLE_INSTALLATION",
+  "CHANGEMENT_ROUTEUR",
+  "AUTRE",
+] as const;
+export type TypePanne = (typeof TYPES_PANNE)[number];
+
+export const TYPE_PANNE_LABELS: Record<TypePanne, string> = {
+  COUPURE_TOTALE: "Coupure totale",
+  DEBIT_FAIBLE: "Débit faible",
+  ONT_DEFECTUEUX: "ONT défectueux",
+  CABLE_ENDOMMAGE: "Câble endommagé",
+  NOUVELLE_INSTALLATION: "Nouvelle installation",
+  CHANGEMENT_ROUTEUR: "Changement de routeur",
+  AUTRE: "Autre",
+};
+
+/* -------------------------------------------------------------------------- */
+/* Regles metier chiffrees                                                    */
+/* -------------------------------------------------------------------------- */
+
+/** Cout bcrypt pour le hachage des mots de passe. */
+export const BCRYPT_ROUNDS = 10;
+
+/** Longueur minimale du rapport exige pour passer une intervention en TERMINEE. */
+export const RAPPORT_LONGUEUR_MIN = 10;
+
+/** Bornes de la note laissee par le client. */
+export const NOTE_MIN = 1;
+export const NOTE_MAX = 5;
+
+/* -------------------------------------------------------------------------- */
+/* Gardes de type                                                             */
+/* -------------------------------------------------------------------------- */
+
+export function estRole(valeur: string): valeur is Role {
+  return (ROLES as readonly string[]).includes(valeur);
+}
+
+export function estStatut(valeur: string): valeur is Statut {
+  return (STATUTS as readonly string[]).includes(valeur);
+}
+
+export function estPriorite(valeur: string): valeur is Priorite {
+  return (PRIORITES as readonly string[]).includes(valeur);
+}
+
+export function estTypePanne(valeur: string): valeur is TypePanne {
+  return (TYPES_PANNE as readonly string[]).includes(valeur);
+}
+
+/**
+ * Libelle francais d'une valeur lue en base. La colonne est un `String`, donc
+ * une valeur inconnue reste theoriquement possible : on la renvoie telle quelle
+ * plutot que d'afficher "undefined".
+ */
+export function libelleStatut(valeur: string): string {
+  return estStatut(valeur) ? STATUT_LABELS[valeur] : valeur;
+}
+
+export function libellePriorite(valeur: string): string {
+  return estPriorite(valeur) ? PRIORITE_LABELS[valeur] : valeur;
+}
+
+export function libelleTypePanne(valeur: string): string {
+  return estTypePanne(valeur) ? TYPE_PANNE_LABELS[valeur] : valeur;
+}
+
+export function couleurStatut(valeur: string) {
+  return estStatut(valeur) ? STATUT_COULEURS[valeur] : STATUT_COULEURS.NOUVELLE;
+}
+
+export function couleurPriorite(valeur: string) {
+  return estPriorite(valeur) ? PRIORITE_COULEURS[valeur] : PRIORITE_COULEURS.NORMALE;
+}
