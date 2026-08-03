@@ -1,0 +1,11 @@
+// Schema Prisma du projet FibreConnect.
+// Les modeles seront ajoutes a l'etape 2.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
