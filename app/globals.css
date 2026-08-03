@@ -1,38 +1,141 @@
 @import "tailwindcss";
 
 /**
- * Palette FibreConnect. Le cyan `signal` ne sert qu'aux elements actifs et aux
- * traits de liaison : jamais en aplat de fond.
+ * FibreConnect — jetons de design.
+ *
+ * Palette imposee par le cahier des charges. Le cyan `signal` est reserve aux
+ * elements actifs et aux traits de liaison : jamais en aplat de fond.
  */
 @theme {
+  /* Bleu nuit : chrome de l'application, fonds sombres. */
   --color-nuit: #0b1d3a;
-  --color-nuit-clair: #16305c;
+  --color-nuit-800: #102647;
+  --color-nuit-700: #1a3a67;
+  --color-nuit-600: #26518d;
+
+  /* Cyan signal : elements actifs, traits de liaison. */
   --color-signal: #22d3ee;
+  --color-signal-profond: #0e7490;
+
+  /* Surfaces claires. */
   --color-ivoire: #f5f7fa;
+  --color-trait: #dbe2ec;
+
+  /* Textes secondaires. */
   --color-ardoise: #64748b;
+  --color-brume: #94a3b8;
+
+  /* Couleurs de statut, constantes dans toute l'application. */
   --color-alerte: #f59e0b;
+  --color-valide: #16a34a;
+  --color-critique: #dc2626;
+  --color-assigne: #2563eb;
 
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+  /* Angles nets : instrument de mesure, pas carte arrondie. */
+  --radius-net: 2px;
+  --radius-bloc: 3px;
+
+  --font-display: var(--font-archivo);
+  --font-sans: var(--font-plex-sans);
+  --font-mono: var(--font-plex-mono);
 }
 
-body {
-  background-color: var(--color-ivoire);
-  color: var(--color-nuit);
+@layer base {
+  body {
+    background-color: var(--color-ivoire);
+    color: var(--color-nuit);
+    font-family: var(--font-sans);
+  }
+
+  /* Les chiffres s'alignent en colonne dans les tableaux. */
+  table,
+  .tabulaire {
+    font-variant-numeric: tabular-nums;
+  }
+
+  /* Focus clavier visible partout, y compris sur fond sombre. */
+  :focus-visible {
+    outline: 2px solid var(--color-signal);
+    outline-offset: 2px;
+    border-radius: 1px;
+  }
+
+  ::selection {
+    background-color: var(--color-signal);
+    color: var(--color-nuit);
+  }
 }
 
-/* Focus clavier visible sur toute l'application. */
-:focus-visible {
-  outline: 2px solid var(--color-signal);
-  outline-offset: 2px;
+@utility eyebrow {
+  font-family: var(--font-display);
+  font-size: 0.6875rem;
+  font-weight: 600;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--color-ardoise);
+}
+
+/**
+ * Element signature : le signal qui progresse dans le cable.
+ * Seule animation du projet, sur le trait de liaison de la timeline.
+ */
+@keyframes progression-signal {
+  0% {
+    transform: translateY(-100%);
+  }
+  100% {
+    transform: translateY(400%);
+  }
+}
+
+.trait-signal {
+  position: relative;
+  overflow: hidden;
+  background-color: var(--color-signal);
+}
+
+.trait-signal::after {
+  content: "";
+  position: absolute;
+  inset-inline: 0;
+  height: 40%;
+  background: linear-gradient(
+    to bottom,
+    transparent,
+    #ffffff 45%,
+    #ffffff 55%,
+    transparent
+  );
+  opacity: 0.9;
+  animation: progression-signal 2.6s cubic-bezier(0.5, 0, 0.5, 1) infinite;
 }
 
 @media (prefers-reduced-motion: reduce) {
+  .trait-signal::after {
+    display: none;
+  }
+
   *,
   *::before,
   *::after {
     animation-duration: 0.01ms !important;
     animation-iteration-count: 1 !important;
     transition-duration: 0.01ms !important;
+  }
+}
+
+/* Impression : on retire le chrome, on garde le contenu. */
+@media print {
+  .sans-impression {
+    display: none !important;
+  }
+
+  body {
+    background: #fff;
+  }
+
+  .zone-impression {
+    border: none !important;
+    padding: 0 !important;
   }
 }

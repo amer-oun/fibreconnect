@@ -6,6 +6,8 @@ import { getSession, signIn } from "next-auth/react";
 
 import { ROLE_ACCUEIL } from "@/lib/constants";
 import { ERREUR_COMPTE_DESACTIVE } from "@/lib/auth";
+import { Bouton } from "@/components/ui/bouton";
+import { ChampTexte, MessageErreur } from "@/components/ui/champs";
 
 export default function FormulaireConnexion({
   callbackUrl,
@@ -23,15 +25,15 @@ export default function FormulaireConnexion({
 
     const donnees = new FormData(evenement.currentTarget);
 
-    // `redirect: false` : on veut choisir nous-memes la destination selon le role.
+    // `redirect: false` : la destination depend du role, on la choisit ici.
     const resultat = await signIn("credentials", {
       redirect: false,
-      email: String(donnees.get("email") ?? ""),
+      email: String(donnees.get("email") ?? "").trim(),
       motDePasse: String(donnees.get("motDePasse") ?? ""),
     });
 
     // Attention : `resultat.ok` vaut `true` meme sur un echec, car la requete
-    // HTTP reussit (200). C'est `resultat.error` qui fait foi.
+    // HTTP aboutit (200). C'est `resultat.error` qui fait foi.
     if (!resultat || resultat.error) {
       setErreur(
         resultat?.error === ERREUR_COMPTE_DESACTIVE
@@ -42,7 +44,6 @@ export default function FormulaireConnexion({
       return;
     }
 
-    // La session vient d'etre creee : on lit le role pour aiguiller.
     const session = await getSession();
     const destination =
       callbackUrl ??
@@ -54,52 +55,30 @@ export default function FormulaireConnexion({
 
   return (
     <form onSubmit={envoyer} className="flex flex-col gap-5" noValidate>
-      <div className="flex flex-col gap-2">
-        <label htmlFor="email" className="text-sm font-medium text-nuit">
-          Adresse e-mail
-        </label>
-        <input
-          id="email"
-          name="email"
-          type="email"
-          required
-          autoComplete="email"
-          autoFocus
-          placeholder="prenom.nom@exemple.tn"
-          className="rounded-md border border-slate-300 bg-white px-3 py-2.5 text-nuit placeholder:text-ardoise/60 focus:border-signal focus:outline-none"
-        />
-      </div>
+      <ChampTexte
+        id="email"
+        label="Adresse e-mail"
+        type="email"
+        required
+        autoComplete="email"
+        autoFocus
+        placeholder="prenom.nom@exemple.tn"
+      />
 
-      <div className="flex flex-col gap-2">
-        <label htmlFor="motDePasse" className="text-sm font-medium text-nuit">
-          Mot de passe
-        </label>
-        <input
-          id="motDePasse"
-          name="motDePasse"
-          type="password"
-          required
-          autoComplete="current-password"
-          className="rounded-md border border-slate-300 bg-white px-3 py-2.5 text-nuit focus:border-signal focus:outline-none"
-        />
-      </div>
+      <ChampTexte
+        id="motDePasse"
+        label="Mot de passe"
+        type="password"
+        required
+        autoComplete="current-password"
+        placeholder="••••••••"
+      />
 
-      {erreur && (
-        <p
-          role="alert"
-          className="rounded-md border border-red-300 bg-red-50 px-3 py-2.5 text-sm text-red-700"
-        >
-          {erreur}
-        </p>
-      )}
+      {erreur && <MessageErreur>{erreur}</MessageErreur>}
 
-      <button
-        type="submit"
-        disabled={enCours}
-        className="mt-1 rounded-md bg-nuit px-4 py-2.5 font-medium text-ivoire transition-colors hover:bg-nuit-clair disabled:cursor-not-allowed disabled:opacity-60"
-      >
-        {enCours ? "Connexion en cours…" : "Se connecter"}
-      </button>
+      <Bouton type="submit" disabled={enCours} taille="grand" className="mt-1">
+        {enCours ? "Connexion…" : "Se connecter"}
+      </Bouton>
     </form>
   );
 }
