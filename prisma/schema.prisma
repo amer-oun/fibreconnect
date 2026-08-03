@@ -1,5 +1,9 @@
 // Schema Prisma du projet FibreConnect.
-// Les modeles seront ajoutes a l'etape 2.
+//
+// CONTRAINTE SQLITE : SQLite ne supporte pas les `enum` Prisma.
+// Les champs `role`, `statut`, `priorite` et `typePanne` sont donc des `String`.
+// Les valeurs autorisees sont definies dans `lib/constants.ts` (`as const` + types
+// TypeScript derives) et validees avec zod a chaque ecriture.
 
 generator client {
   provider = "prisma-client-js"
@@ -8,4 +12,118 @@ generator client {
 datasource db {
   provider = "sqlite"
   url      = env("DATABASE_URL")
+}
+
+/// Compte de connexion, commun aux trois roles.
+model Utilisateur {
+  id         String   @id @default(cuid())
+  email      String   @unique
+  motDePasse String // hache avec bcrypt (10 rounds), jamais en clair
+  role       String // CLIENT | TECHNICIEN | SUPERVISEUR -- voir lib/constants.ts
+  nom        String
+  prenom     String
+  telephone  String
+  actif      Boolean  @default(true)
+  creeLe     DateTime @default(now())
+
+  // Profil metier : au plus un des deux selon le role.
+  client     Client?
+  technicien Technicien?
+
+  // Interventions assignees par cet utilisateur quand il est SUPERVISEUR.
+  interventionsSupervisees Intervention[] @relation("Superviseur")
+
+  @@index([role])
+}
+
+/// Operateur fibre : Tunisie Telecom, Ooredoo, Orange.
+model Operateur {
+  id      String  @id @default(cuid())
+  nom     String  @unique
+  logoUrl String?
+
+  clients     Client[]
+  techniciens Technicien[]
+}
+
+/// Profil d'un abonne. C'est son operateur qui determine
+/// quels techniciens verront ses pannes.
+model Client {
+  id            String @id @default(cuid())
+  utilisateurId String @unique
+  operateurId   String
+  adresse       String
+  ville         String
+  numContrat    String @unique
+  latitude      Float?
+  longitude     Float?
+
+  utilisateur   Utilisateur    @relation(fields: [utilisateurId], references: [id], onDelete: Cascade)
+  operateur     Operateur      @relation(fields: [operateurId], references: [id])
+  interventions Intervention[]
+
+  @@index([operateurId])
+}
+
+/// Profil d'un technicien, rattache a un seul operateur.
+model Technicien {
+  id            String  @id @default(cuid())
+  utilisateurId String  @unique
+  operateurId   String
+  matricule     String  @unique
+  specialite    String
+  zone          String
+  disponible    Boolean @default(true)
+  photoUrl      String?
+
+  utilisateur   Utilisateur    @relation(fields: [utilisateurId], references: [id], onDelete: Cascade)
+  operateur     Operateur      @relation(fields: [operateurId], references: [id])
+  interventions Intervention[]
+  historiques   Historique[]
+
+  @@index([operateurId])
+}
+
+/// Une panne declaree par un client, puis prise en charge par un technicien.
+model Intervention {
+  id            String    @id @default(cuid())
+  clientId      String
+  technicienId  String? // null tant que personne n'a accepte
+  superviseurId String? // renseigne si l'assignation est manuelle
+  typePanne     String // voir TYPES_PANNE dans lib/constants.ts
+  description   String
+  statut        String    @default("NOUVELLE") // NOUVELLE|ASSIGNEE|EN_COURS|TERMINEE|ANNULEE
+  priorite      String    @default("NORMALE") // BASSE|NORMALE|HAUTE|URGENTE
+  dateCreation  DateTime  @default(now())
+  dateDebut     DateTime?
+  dateFin       DateTime?
+  rapport       String? // obligatoire (>= 10 caracteres) au passage en TERMINEE
+  noteClient    Int? // 1 a 5, une seule fois, uniquement si TERMINEE
+
+  client      Client       @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  technicien  Technicien?  @relation(fields: [technicienId], references: [id])
+  superviseur Utilisateur? @relation("Superviseur", fields: [superviseurId], references: [id])
+  historiques Historique[]
+
+  @@index([statut])
+  @@index([clientId])
+  @@index([technicienId])
+}
+
+/// Journal des transitions de statut. Ecrit uniquement par
+/// `changerStatut()` dans lib/interventions.ts, dans une transaction.
+model Historique {
+  id             String   @id @default(cuid())
+  interventionId String
+  technicienId   String? // null si l'action vient du client ou du superviseur
+  action         String
+  ancienStatut   String? // null pour la creation de l'intervention
+  nouveauStatut  String
+  dateAction     DateTime @default(now())
+  commentaire    String?
+
+  intervention Intervention @relation(fields: [interventionId], references: [id], onDelete: Cascade)
+  technicien   Technicien?  @relation(fields: [technicienId], references: [id])
+
+  @@index([interventionId])
 }
