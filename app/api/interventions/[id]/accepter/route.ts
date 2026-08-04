@@ -44,9 +44,13 @@ export async function POST(
       );
     }
 
-    if (intervention.technicienId) {
+    // L'ordre compte : une intervention close n'est pas « déjà prise », elle
+    // est terminée. Tester le statut avant le technicien évite un message faux.
+    if (intervention.statut !== "NOUVELLE") {
       throw new ErreurMetier(
-        "Un autre technicien vient d’accepter cette intervention.",
+        intervention.technicienId
+          ? "Cette intervention est déjà prise en charge."
+          : "Cette intervention n’est plus disponible.",
         409,
       );
     }

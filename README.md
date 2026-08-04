@@ -1,36 +1,402 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# FibreConnect
 
-## Getting Started
+Application web de gestion des interventions de maintenance fibre optique pour
+une société opérant en Tunisie. Trois profils s'y croisent : l'abonné qui
+déclare une panne, le technicien qui la traite sur le terrain, et le
+superviseur qui arbitre l'ensemble.
 
-First, run the development server:
+Projet de fin d'études (stage BTP).
 
-```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+---
+
+## Sommaire
+
+- [Ce que fait l'application](#ce-que-fait-lapplication)
+- [Stack technique](#stack-technique)
+- [Schéma de la base](#schéma-de-la-base)
+- [Installation](#installation)
+- [Identifiants de démonstration](#identifiants-de-démonstration)
+- [Règles métier](#règles-métier)
+- [Architecture](#architecture)
+- [Sécurité](#sécurité)
+- [Direction visuelle](#direction-visuelle)
+- [Choix techniques notables](#choix-techniques-notables)
+
+---
+
+## Ce que fait l'application
+
+| Rôle | Ce qu'il peut faire |
+|---|---|
+| **Client** | Déclarer une panne, suivre son avancement étape par étape, noter le technicien une fois l'intervention terminée |
+| **Technicien** | Consulter les pannes disponibles **de son opérateur**, les accepter, les démarrer, rédiger le rapport de clôture, gérer son profil |
+| **Superviseur** | Superviser les trois opérateurs : statistiques, affectation manuelle, activation des comptes techniciens, carte des abonnés |
+
+### Pages
+
+```
+/                               page de garde publique (trois portes)
+/login                          formulaire unique, redirection selon le rôle
+/register                       inscription, réservée aux abonnés
+
+/client/dashboard               mes demandes + recherche et filtres
+/client/nouvelle-panne          formulaire de déclaration
+/client/suivi/[id]              timeline, rapport, notation, impression
+
+/technicien/dashboard           pannes disponibles (filtrées par opérateur)
+/technicien/mes-interventions   accepter / démarrer / terminer
+/technicien/historique          interventions passées, rapports, notes
+/technicien/profil              spécialité, zone, disponibilité
+
+/superviseur/dashboard          statistiques et graphiques
+/superviseur/interventions      affectation et réaffectation manuelles
+/superviseur/techniciens        équipe, activation des comptes
+/superviseur/techniciens/[id]   fiche complète et journal d'activité
+/superviseur/clients            liste et carte OpenStreetMap
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+---
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## Stack technique
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+| Domaine | Choix |
+|---|---|
+| Framework | Next.js 16 (App Router), React 19, TypeScript |
+| Styles | Tailwind CSS v4 |
+| Base de données | SQLite via Prisma ORM 6 |
+| Authentification | NextAuth v4, provider Credentials |
+| Mots de passe | bcryptjs, 10 rounds |
+| Validation | zod |
+| Graphiques | recharts |
+| Cartographie | react-leaflet + OpenStreetMap (aucune clé API) |
 
-## Learn More
+---
 
-To learn more about Next.js, take a look at the following resources:
+## Schéma de la base
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+Six tables. SQLite ne supportant pas les `enum` Prisma, les champs `role`,
+`statut`, `priorite` et `typePanne` sont des `String` dont les valeurs
+autorisées sont centralisées dans `lib/constants.ts` et validées par zod à
+chaque écriture.
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+```mermaid
+erDiagram
+    Utilisateur ||--o| Client : "profil"
+    Utilisateur ||--o| Technicien : "profil"
+    Utilisateur ||--o{ Intervention : "supervise"
+    Operateur   ||--o{ Client : "abonnés"
+    Operateur   ||--o{ Technicien : "équipe"
+    Client      ||--o{ Intervention : "déclare"
+    Technicien  ||--o{ Intervention : "traite"
+    Technicien  ||--o{ Historique : "agit"
+    Intervention ||--o{ Historique : "journalise"
 
-## Deploy on Vercel
+    Utilisateur {
+        string   id PK
+        string   email UK
+        string   motDePasse "hache bcrypt"
+        string   role "CLIENT|TECHNICIEN|SUPERVISEUR"
+        string   nom
+        string   prenom
+        string   telephone
+        boolean  actif "defaut true"
+        datetime creeLe
+    }
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+    Operateur {
+        string id PK
+        string nom UK
+        string logoUrl "nullable"
+    }
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+    Client {
+        string id PK
+        string utilisateurId FK "unique"
+        string operateurId FK
+        string adresse
+        string ville
+        string numContrat UK
+        float  latitude "nullable"
+        float  longitude "nullable"
+    }
+
+    Technicien {
+        string  id PK
+        string  utilisateurId FK "unique"
+        string  operateurId FK
+        string  matricule UK
+        string  specialite
+        string  zone
+        boolean disponible "defaut true"
+        string  photoUrl "nullable"
+    }
+
+    Intervention {
+        string   id PK
+        string   clientId FK
+        string   technicienId FK "nullable"
+        string   superviseurId FK "nullable"
+        string   typePanne
+        string   description
+        string   statut "defaut NOUVELLE"
+        string   priorite "defaut NORMALE"
+        datetime dateCreation
+        datetime dateDebut "nullable"
+        datetime dateFin "nullable"
+        string   rapport "nullable"
+        int      noteClient "nullable 1-5"
+    }
+
+    Historique {
+        string   id PK
+        string   interventionId FK
+        string   technicienId FK "nullable"
+        string   action
+        string   ancienStatut "nullable"
+        string   nouveauStatut
+        datetime dateAction
+        string   commentaire "nullable"
+    }
+```
+
+### Valeurs autorisées
+
+| Champ | Valeurs |
+|---|---|
+| `role` | `CLIENT`, `TECHNICIEN`, `SUPERVISEUR` |
+| `statut` | `NOUVELLE` → `ASSIGNEE` → `EN_COURS` → `TERMINEE`, plus `ANNULEE` |
+| `priorite` | `BASSE`, `NORMALE`, `HAUTE`, `URGENTE` |
+| `typePanne` | `COUPURE_TOTALE`, `DEBIT_FAIBLE`, `ONT_DEFECTUEUX`, `CABLE_ENDOMMAGE`, `NOUVELLE_INSTALLATION`, `CHANGEMENT_ROUTEUR`, `AUTRE` |
+
+---
+
+## Installation
+
+**Prérequis** : Node.js 20.9 ou plus récent.
+
+```bash
+# 1. Dépendances
+npm install
+
+# 2. Variables d'environnement
+cp .env.example .env
+# puis générer une clé de session :
+node -e "console.log(require('crypto').randomBytes(32).toString('base64'))"
+# et la coller dans NEXTAUTH_SECRET
+
+# 3. Créer la base et appliquer le schéma
+npx prisma migrate dev
+
+# 4. Charger le jeu de données de démonstration
+npx prisma db seed
+
+# 5. Lancer l'application
+npm run dev
+```
+
+L'application démarre sur <http://localhost:3000>.
+
+### Autres commandes
+
+```bash
+npm run build       # build de production
+npm start           # lancer le build de production
+npm run lint        # ESLint
+npx tsc --noEmit    # vérification des types
+npx prisma studio   # explorateur de base de données
+npx prisma db seed  # réinitialiser le jeu de données
+```
+
+Le seed vide la base avant de la recréer : il est rejouable autant de fois que
+nécessaire, et son tirage aléatoire est déterministe (graine fixe), donc deux
+exécutions produisent exactement le même jeu de données.
+
+---
+
+## Identifiants de démonstration
+
+Mot de passe commun à tous les comptes : **`Passer123`**
+
+| Rôle | Adresse e-mail | Détail |
+|---|---|---|
+| Superviseur | `superviseur@fibreconnect.tn` | Leila Ben Salah |
+| Technicien | `karim.bouazizi@fibreconnect.tn` | Tunisie Telecom · Tunis |
+| Technicien | `sonia.trabelsi@fibreconnect.tn` | Tunisie Telecom · Ariana |
+| Technicien | `mehdi.gharbi@fibreconnect.tn` | Ooredoo · Ben Arous |
+| Technicien | `amine.jlassi@fibreconnect.tn` | Orange · Sfax |
+| Client | `nadia.chaabane@example.tn` | Tunisie Telecom · Tunis |
+| Client | `youssef.mansouri@example.tn` | Tunisie Telecom · Ariana |
+| Client | `ines.khelifi@example.tn` | Tunisie Telecom · La Marsa |
+| Client | `slim.ferchichi@example.tn` | Ooredoo · Ben Arous |
+| Client | `rania.abdallah@example.tn` | Ooredoo · Sousse |
+| Client | `hatem.zouari@example.tn` | Orange · Sfax |
+
+Le jeu de données contient 3 opérateurs, 11 utilisateurs, 32 interventions
+réparties sur 6 mois et 105 lignes d'historique.
+
+La page `/login` affiche ces comptes dans un panneau dépliant. Passez
+`NEXT_PUBLIC_MODE_DEMO="false"` dans `.env` pour le masquer en production.
+
+### Scénario de démonstration
+
+1. Connectez-vous en **client** (`nadia.chaabane@example.tn`) et déclarez une panne.
+2. Connectez-vous en **technicien Tunisie Telecom** (`karim.bouazizi@…`) : la
+   panne apparaît dans « Pannes disponibles ». Acceptez-la, démarrez-la, puis
+   clôturez-la avec un rapport.
+3. Connectez-vous en **technicien Orange** (`amine.jlassi@…`) : cette même panne
+   n'apparaît **jamais**, l'abonné n'étant pas chez son opérateur. C'est la
+   règle centrale du projet.
+4. Revenez en **client** : la timeline montre chaque étape, et vous pouvez noter
+   l'intervention.
+5. Connectez-vous en **superviseur** pour voir les statistiques mises à jour,
+   réaffecter une intervention ou désactiver un compte technicien.
+
+---
+
+## Règles métier
+
+1. Une intervention est créée par un client avec le statut `NOUVELLE` et sans technicien.
+2. **Un technicien ne voit que les interventions `NOUVELLE` dont le client
+   appartient au même opérateur que lui.** C'est la règle centrale : elle est
+   appliquée dans la requête SQL, et revérifiée côté serveur à l'acceptation.
+3. Lorsqu'un technicien accepte : statut → `ASSIGNEE` et `technicienId` renseigné.
+4. « Démarrer » → `EN_COURS` + `dateDebut`. « Terminer » → `TERMINEE` +
+   `dateFin` + rapport obligatoire d'au moins 10 caractères.
+5. Le superviseur peut affecter ou réaffecter n'importe quelle intervention à
+   n'importe quel technicien du même opérateur, et désactiver un compte
+   technicien (`actif = false`).
+6. Un utilisateur dont le compte a `actif = false` ne peut pas se connecter.
+7. Le client peut noter (1 à 5) une intervention `TERMINEE`, une seule fois.
+
+### Traçabilité
+
+**Toute** transition de statut écrit une ligne dans `Historique`. Elle passe
+obligatoirement par la fonction unique `changerStatut()` de
+`lib/interventions.ts`, qui, dans une **transaction Prisma** :
+
+1. vérifie que la transition est autorisée (`TRANSITIONS_STATUT`) ;
+2. met à jour l'intervention ;
+3. crée la ligne d'historique correspondante.
+
+Si l'une des trois opérations échoue, aucune n'est appliquée. Aucune route ne
+modifie `statut` directement.
+
+---
+
+## Architecture
+
+```
+app/
+  page.tsx                 page de garde
+  login/  register/        authentification
+  client/  technicien/  superviseur/
+                           un layout par espace, protégé par son rôle
+  api/                     Route Handlers, réponses { data } ou { error }
+components/
+  ui/                      badges, boutons, champs, surfaces, squelettes
+  navigation/              coquille applicative, rail latéral, notifications
+  interventions/           lignes de liste, filtres, actions métier
+  graphiques/              graphiques recharts du superviseur
+  carte/                   carte Leaflet (chargée côté navigateur uniquement)
+  timeline-intervention.tsx  élément signature
+lib/
+  constants.ts             valeurs autorisées, libellés, couleurs de statut
+  prisma.ts                singleton du client Prisma
+  interventions.ts         changerStatut() et contrôles de propriété
+  validations.ts           schémas zod
+  session.ts               exigerRole(), utilisateurConnecte()
+  api.ts                   réponses et gestion d'erreurs communes
+  statistiques.ts          calculs du tableau de bord superviseur
+  notifications.ts         alertes dérivées des données
+  filtres.ts  dates.ts     filtres d'URL, formatage des dates
+proxy.ts                   protection des routes par rôle
+prisma/
+  schema.prisma  seed.ts  migrations/
+```
+
+Les composants sont des **Server Components** par défaut. `"use client"` n'est
+utilisé que pour les formulaires, les graphiques, la carte et les quelques
+éléments interactifs (cloche de notifications, barre de filtres).
+
+---
+
+## Sécurité
+
+- **Mots de passe** hachés avec bcrypt (10 rounds). Jamais stockés ni renvoyés
+  en clair, y compris par l'API de session.
+- **Deux niveaux de contrôle.** `proxy.ts` filtre par URL en lisant le rôle dans
+  le JWT signé, sans requête SQL. Chaque page et chaque route API revérifient
+  ensuite le rôle **et la propriété** de la ressource : un technicien ne peut
+  pas modifier l'intervention d'un collègue par un appel direct à l'API, un
+  client ne peut pas consulter la demande d'un autre.
+- **Validation zod** sur tous les payloads entrants.
+- **Énumération d'adresses** empêchée : une adresse inconnue déclenche quand
+  même une comparaison bcrypt, pour que le temps de réponse ne trahisse pas
+  l'existence du compte.
+- **Redirection ouverte** empêchée : le paramètre `callbackUrl` n'est accepté
+  que s'il désigne un chemin interne.
+- **Erreurs techniques** journalisées côté serveur et jamais renvoyées au
+  navigateur.
+
+> Next.js 16 a renommé `middleware.ts` en `proxy.ts` (même rôle, runtime Node au
+> lieu de edge). Le fichier `proxy.ts` remplit la fonction décrite dans le
+> cahier des charges sous le nom de middleware.
+
+---
+
+## Direction visuelle
+
+Le sujet est la fibre : de la lumière qui parcourt une distance et s'atténue.
+
+- **Palette** — bleu nuit `#0B1D3A`, cyan signal `#22D3EE`, blanc cassé
+  `#F5F7FA`, gris ardoise `#64748B`, ambre `#F59E0B`. Le cyan est réservé aux
+  éléments actifs et aux traits de liaison, jamais en aplat de fond.
+- **Page de garde** — une trace de réflectométrie (OTDR), la courbe que lit un
+  technicien fibre, avec ses pics à chaque connecteur et chaque épissure.
+- **Typographie** — Archivo pour les titres, IBM Plex Sans pour le texte,
+  IBM Plex Mono pour les identifiants, matricules, dates et coordonnées.
+- **Surfaces** — filets de 1 px et angles à 2 px, aucune carte arrondie à ombre
+  portée. L'élément actif est marqué d'une arête cyan à gauche.
+- **Élément signature** — sur la timeline d'une intervention, un trait cyan
+  parcouru par une lueur qui progresse : le signal qui avance dans le câble.
+  C'est la **seule** animation du projet, et elle disparaît entièrement sous
+  `prefers-reduced-motion`.
+- **Couleurs de statut**, constantes partout (badges, tableaux, graphiques) :
+  `NOUVELLE` ardoise, `ASSIGNEE` bleu, `EN_COURS` ambre, `TERMINEE` vert,
+  `ANNULEE` rouge.
+- **Responsive** — rail latéral sur grand écran, barre d'onglets en bas sur
+  téléphone, pour que le technicien atteigne la navigation au pouce. Testé
+  jusqu'à 375 px de large.
+
+---
+
+## Choix techniques notables
+
+**Prisma 6 plutôt que 7.** Prisma 7 impose un *driver adapter* pour SQLite et un
+fichier `prisma.config.ts` réclamant `dotenv` : deux dépendances de plus et un
+client généré hors de `@prisma/client`. La version 6 correspond au flux
+classique décrit dans le cahier des charges.
+
+**Filtres et recherche dans l'URL.** Les listes restent des pages rendues côté
+serveur, une vue filtrée se partage par simple copie du lien, et le bouton
+« précédent » du navigateur se comporte normalement.
+
+**Notifications dérivées, pas stockées.** Il n'existe pas de table
+`Notification` : chaque alerte est recalculée à partir des interventions. Rien
+ne peut donc contredire la base, et aucune migration supplémentaire n'est
+nécessaire. En contrepartie, il n'y a pas d'état « lu ».
+
+**Export PDF par la fonction d'impression du navigateur.** Les fiches sont mises
+en page pour le papier via `@media print`, plutôt que d'embarquer une
+bibliothèque PDF. « Enregistrer au format PDF » est disponible dans la boîte de
+dialogue d'impression de tous les systèmes.
+
+**Accessibilité des couleurs.** Les couleurs de statut imposées par le cahier
+des charges ont été passées à un validateur de contraste : « Terminée » (vert)
+et « Annulée » (rouge) ne sont pas distinguables par une personne atteinte de
+deutéranopie (ΔE 5,0 pour un seuil de 8). La palette a été conservée, mais
+**aucune information ne repose sur la couleur seule** : chaque badge porte son
+libellé, chaque barre de graphique affiche sa valeur, chaque série est nommée
+dans une légende, et le tableau de bord propose une table de repli. La paire de
+couleurs du graphique temporel (`#0891B2` / `#16A34A`) a été choisie parce
+qu'elle passe les six contrôles du validateur.

@@ -29,23 +29,20 @@ export async function PATCH(
       throw new ErreurMetier("Ce technicien n’existe pas.", 404);
     }
 
-    if (!actif) {
-      const enCours = await prisma.intervention.count({
-        where: { technicienId: id, statut: { in: ["ASSIGNEE", "EN_COURS"] } },
-      });
-      if (enCours > 0) {
-        throw new ErreurMetier(
-          `Ce technicien a encore ${enCours} intervention${enCours > 1 ? "s" : ""} en cours. Réaffectez-les avant de désactiver son compte.`,
-        );
-      }
-    }
+    // Le superviseur peut désactiver n'importe quel compte : c'est une
+    // prérogative que lui donne le cahier des charges, sans condition. On ne
+    // bloque donc pas quand il reste des interventions ouvertes — on renvoie
+    // leur nombre pour que l'interface le signale et qu'il puisse réaffecter.
+    const enCours = await prisma.intervention.count({
+      where: { technicienId: id, statut: { in: ["ASSIGNEE", "EN_COURS"] } },
+    });
 
     await prisma.utilisateur.update({
       where: { id: technicien.utilisateurId },
       data: { actif },
     });
 
-    return reponseOk({ id, actif });
+    return reponseOk({ id, actif, interventionsOuvertes: enCours });
   } catch (erreur) {
     return traiterErreur(erreur);
   }

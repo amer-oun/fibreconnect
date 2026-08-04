@@ -52,6 +52,14 @@ export async function POST(
     if (!technicien) {
       throw new ErreurMetier("Ce technicien n’existe pas.", 404);
     }
+    // Le statut d'abord : une intervention close ne se réaffecte pas, quel que
+    // soit le technicien visé. Tester l'opérateur avant donnerait une raison
+    // exacte mais hors sujet.
+    if (intervention.statut === "TERMINEE" || intervention.statut === "ANNULEE") {
+      throw new ErreurMetier(
+        "Une intervention terminée ou annulée ne peut plus être réaffectée.",
+      );
+    }
     if (!technicien.utilisateur.actif) {
       throw new ErreurMetier(
         "Ce compte technicien est désactivé : réactivez-le avant de lui affecter une intervention.",
@@ -60,11 +68,6 @@ export async function POST(
     if (technicien.operateurId !== intervention.client.operateurId) {
       throw new ErreurMetier(
         "Ce technicien ne travaille pas pour l’opérateur de cet abonné.",
-      );
-    }
-    if (intervention.statut === "TERMINEE" || intervention.statut === "ANNULEE") {
-      throw new ErreurMetier(
-        "Une intervention terminée ou annulée ne peut plus être réaffectée.",
       );
     }
     if (intervention.technicienId === technicien.id) {

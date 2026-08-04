@@ -168,7 +168,7 @@ async function notificationsSuperviseur() {
       id: `attente-${i.id}`,
       titre: "Panne sans technicien depuis plus de 24 h",
       detail: `${libelleTypePanne(i.typePanne)} · ${i.client.operateur.nom} · ${i.client.ville}`,
-      lien: "/superviseur/dashboard",
+      lien: "/superviseur/interventions",
       date: i.dateCreation,
       ton: "alerte" as const,
     })),
@@ -178,7 +178,7 @@ async function notificationsSuperviseur() {
         ? "Technicien indisponible"
         : "Compte technicien désactivé",
       detail: `${t.utilisateur.prenom} ${t.utilisateur.nom} · ${t.matricule}`,
-      lien: "/superviseur/dashboard",
+      lien: `/superviseur/techniciens/${t.id}`,
       date: new Date(),
       ton: "info" as const,
     })),

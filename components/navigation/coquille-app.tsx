@@ -27,10 +27,11 @@ export const NAVIGATION: Record<Role, EntreeNav[]> = {
     { libelle: "Historique", abrege: "Historique", href: "/technicien/historique", icone: "archive" },
     { libelle: "Mon profil", abrege: "Profil", href: "/technicien/profil", icone: "profil" },
   ],
-  // Les pages Interventions, Techniciens et Clients restent à construire :
-  // elles seront rajoutées ici en même temps que leurs fichiers.
   SUPERVISEUR: [
     { libelle: "Tableau de bord", abrege: "Bord", href: "/superviseur/dashboard", icone: "stats" },
+    { libelle: "Interventions", abrege: "Interv.", href: "/superviseur/interventions", icone: "liste" },
+    { libelle: "Techniciens", abrege: "Équipe", href: "/superviseur/techniciens", icone: "equipe" },
+    { libelle: "Clients", abrege: "Clients", href: "/superviseur/clients", icone: "carte" },
   ],
 };
 

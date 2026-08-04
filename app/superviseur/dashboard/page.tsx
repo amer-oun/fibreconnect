@@ -9,6 +9,7 @@ import {
   Panneau,
   TitrePanneau,
 } from "@/components/ui/surfaces";
+import { LienBouton } from "@/components/ui/bouton";
 import BoutonImpression from "@/components/ui/bouton-impression";
 import {
   GraphiqueCharge,
@@ -29,7 +30,14 @@ export default async function TableauDeBordSuperviseur() {
         surtitre="Supervision"
         titre="Tableau de bord"
         description="Vue d’ensemble des trois opérateurs : charge en cours, délais, qualité perçue."
-        actions={<BoutonImpression libelle="Imprimer le rapport" />}
+        actions={
+          <>
+            <BoutonImpression libelle="Imprimer le rapport" />
+            <LienBouton href="/superviseur/interventions" variante="secondaire">
+              Affecter les interventions
+            </LienBouton>
+          </>
+        }
       />
 
       {/* Chiffres-clés */}
@@ -114,7 +122,19 @@ export default async function TableauDeBordSuperviseur() {
         </Panneau>
 
         <Panneau className="lg:col-span-2">
-          <TitrePanneau>Charge par technicien</TitrePanneau>
+          <TitrePanneau
+            actions={
+              <LienBouton
+                href="/superviseur/techniciens"
+                variante="discret"
+                taille="petit"
+              >
+                Voir l’équipe
+              </LienBouton>
+            }
+          >
+            Charge par technicien
+          </TitrePanneau>
           <div className="p-4 sm:p-5">
             <GraphiqueCharge donnees={stats.chargeTechniciens} />
           </div>

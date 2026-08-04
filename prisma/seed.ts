@@ -569,6 +569,209 @@ async function main() {
   });
 
   /* ---------------------------------------------------------------------- */
+  /* Historique des 6 derniers mois                                         */
+  /* ---------------------------------------------------------------------- */
+
+  /**
+   * Les 10 interventions ci-dessus couvrent tous les statuts et servent à la
+   * démonstration « à chaud ». Elles ne suffisent pas à donner du relief aux
+   * graphiques du superviseur, qui portent sur 6 mois : on ajoute ici un
+   * historique d'interventions closes, réparti sur cette période.
+   *
+   * Le tirage est déterministe (générateur à graine fixe) : deux exécutions du
+   * seed produisent exactement le même jeu de données.
+   */
+  console.log("Création de l'historique des 6 derniers mois...");
+
+  let graine = 20260803;
+  const alea = () => {
+    graine = (graine * 1103515245 + 12345) % 2147483648;
+    return graine / 2147483648;
+  };
+  const parmi = <T,>(liste: readonly T[]) => liste[Math.floor(alea() * liste.length)];
+
+  // Chaque client ne peut être traité que par un technicien de son opérateur.
+  const equipes = [
+    { clients: [nadia, youssef, ines], techniciens: [karim, sonia] },
+    { clients: [slim, rania], techniciens: [mehdi] },
+    { clients: [hatem], techniciens: [amine] },
+  ];
+
+  const CATALOGUE: Record<
+    TypePanne,
+    { description: string; rapport: string }[]
+  > = {
+    COUPURE_TOTALE: [
+      {
+        description:
+          "Aucune connexion depuis le début de matinée, le voyant PON reste éteint sur la box.",
+        rapport:
+          "Fibre sectionnée dans la colonne montante de l'immeuble. Reprise par épissure de fusion, perte mesurée à 0,04 dB. Ligne rétablie et contrôlée avec l'abonné.",
+      },
+      {
+        description:
+          "Plus d'internet ni de téléphone fixe depuis hier soir, après une coupure de courant dans le quartier.",
+        rapport:
+          "Alimentation de l'ONT défaillante après la surtension. Remplacement du bloc secteur et redémarrage complet. Débit rétabli à 96 Mb/s.",
+      },
+    ],
+    DEBIT_FAIBLE: [
+      {
+        description:
+          "Le débit plafonne à 12 Mb/s alors que l'abonnement est à 100 Mb/s, surtout en soirée.",
+        rapport:
+          "Jarretière optique pincée derrière le meuble, atténuation de 3,1 dB. Remplacement de la jarretière et repositionnement de l'ONT. Débit remonté à 94 Mb/s.",
+      },
+      {
+        description:
+          "Connexion très lente et instable sur tous les appareils, y compris en filaire.",
+        rapport:
+          "Connecteur SC/APC encrassé au niveau du PBO. Nettoyage à sec puis contrôle au réflectomètre : signal conforme sur toute la liaison.",
+      },
+    ],
+    ONT_DEFECTUEUX: [
+      {
+        description:
+          "L'ONT redémarre plusieurs fois par jour et le voyant d'alarme reste allumé en rouge.",
+        rapport:
+          "ONT en défaut matériel, module optique hors tolérance. Remplacement de l'équipement et réenregistrement de la ligne auprès de l'OLT.",
+      },
+    ],
+    CABLE_ENDOMMAGE: [
+      {
+        description:
+          "Le câble qui longe la façade a été arraché lors de travaux de ravalement.",
+        rapport:
+          "Reprise du câble de branchement sur 18 mètres et repose sur nouvelles attaches. Épissure de raccordement au PBO, liaison contrôlée conforme.",
+      },
+    ],
+    NOUVELLE_INSTALLATION: [
+      {
+        description:
+          "Demande de raccordement pour un logement neuf, la gaine est déjà tirée jusqu'au palier.",
+        rapport:
+          "Tirage de la fibre du PBO palier jusqu'à la prise optique du salon, pose de la PTO et de l'ONT. Mise en service et configuration du routeur avec l'abonné.",
+      },
+    ],
+    CHANGEMENT_ROUTEUR: [
+      {
+        description:
+          "Le Wi-Fi ne porte plus au-delà d'une pièce et la bande 5 GHz a disparu.",
+        rapport:
+          "Routeur remplacé par un modèle récent, canaux Wi-Fi réattribués après analyse du voisinage. Couverture vérifiée dans chaque pièce.",
+      },
+    ],
+    AUTRE: [
+      {
+        description:
+          "La prise optique murale s'est descellée et la fibre est tendue, je crains de l'abîmer.",
+        rapport:
+          "Prise optique refixée sur platine et fibre reprise en attente avec un rayon de courbure conforme. Aucun impact mesuré sur le signal.",
+      },
+    ],
+  };
+
+  const TYPES: TypePanne[] = [
+    "COUPURE_TOTALE",
+    "DEBIT_FAIBLE",
+    "ONT_DEFECTUEUX",
+    "CABLE_ENDOMMAGE",
+    "NOUVELLE_INSTALLATION",
+    "CHANGEMENT_ROUTEUR",
+    "AUTRE",
+  ];
+  const PRIORITES_TIRAGE: Priorite[] = [
+    "BASSE",
+    "NORMALE",
+    "NORMALE",
+    "NORMALE",
+    "HAUTE",
+    "URGENTE",
+  ];
+
+  const H_JOUR = 24;
+  // Mois 1 à 6 en arrière, avec un volume qui progresse vers le présent.
+  const VOLUME_PAR_MOIS = [3, 4, 3, 5, 4, 3];
+
+  for (const [index, volume] of VOLUME_PAR_MOIS.entries()) {
+    const moisEnArriere = VOLUME_PAR_MOIS.length - index; // 6 → 1
+    for (let n = 0; n < volume; n++) {
+      const equipe = parmi(equipes);
+      const client = parmi(equipe.clients);
+      const technicien = parmi(equipe.techniciens);
+      const type = parmi(TYPES);
+      const modele = parmi(CATALOGUE[type]);
+
+      // Date de déclaration quelque part dans le mois considéré.
+      const creation =
+        moisEnArriere * 30 * H_JOUR - Math.floor(alea() * 28) * H_JOUR;
+      const acceptation = creation - (2 + Math.floor(alea() * 20));
+      const demarrage = acceptation - (4 + Math.floor(alea() * 40));
+      const cloture = demarrage - (1 + Math.floor(alea() * 6));
+
+      // Une intervention sur sept est annulée avant toute prise en charge.
+      const annulee = alea() < 0.14;
+
+      if (annulee) {
+        await creerIntervention({
+          clientId: client.id,
+          typePanne: type,
+          priorite: parmi(PRIORITES_TIRAGE),
+          description: modele.description,
+          creeeIlYaHeures: creation,
+          etapes: [
+            {
+              action: "ANNULATION",
+              vers: "ANNULEE",
+              ilYaHeures: acceptation,
+              commentaire:
+                "Annulée par le client : problème résolu sans intervention",
+            },
+          ],
+        });
+        continue;
+      }
+
+      // Trois interventions sur quatre reçoivent une note de l'abonné.
+      const notee = alea() < 0.75;
+
+      await creerIntervention({
+        clientId: client.id,
+        technicienId: technicien.id,
+        typePanne: type,
+        priorite: parmi(PRIORITES_TIRAGE),
+        description: modele.description,
+        rapport: modele.rapport,
+        noteClient: notee ? (alea() < 0.7 ? 5 : 4) : undefined,
+        creeeIlYaHeures: creation,
+        etapes: [
+          {
+            action: "ACCEPTATION",
+            vers: "ASSIGNEE",
+            ilYaHeures: acceptation,
+            parLeTechnicien: true,
+            commentaire: "Intervention acceptée par le technicien",
+          },
+          {
+            action: "DEMARRAGE",
+            vers: "EN_COURS",
+            ilYaHeures: demarrage,
+            parLeTechnicien: true,
+            commentaire: "Technicien sur place",
+          },
+          {
+            action: "CLOTURE",
+            vers: "TERMINEE",
+            ilYaHeures: cloture,
+            parLeTechnicien: true,
+            commentaire: "Rapport enregistré, ligne rétablie",
+          },
+        ],
+      });
+    }
+  }
+
+  /* ---------------------------------------------------------------------- */
   /* Récapitulatif                                                          */
   /* ---------------------------------------------------------------------- */
 
