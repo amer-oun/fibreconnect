@@ -45,6 +45,10 @@ export default function BarreFiltres({
     if (valeur) suivants.set(cle, valeur);
     else suivants.delete(cle);
 
+    // Changer un filtre depuis la page 5 laisserait voir une liste vide alors
+    // que le resultat tient sur une page. On revient toujours au debut.
+    suivants.delete("page");
+
     demarrerTransition(() => {
       router.replace(`${pathname}?${suivants.toString()}`, { scroll: false });
     });
@@ -52,9 +56,6 @@ export default function BarreFiltres({
 
   // Le champ texte attend une pause de frappe avant de relancer la requete.
   useEffect(() => {
-
-
-
     if (recherche.trim() === qUrl) return;
     const minuteur = setTimeout(() => appliquer("q", recherche.trim()), 300);
     return () => clearTimeout(minuteur);

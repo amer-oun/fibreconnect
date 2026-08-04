@@ -217,7 +217,7 @@ L'application démarre sur <http://localhost:3000>.
 ```bash
 npm run build       # build de production
 npm start           # lancer le build de production
-npm test            # tests des règles métier (15 tests)
+npm test            # règles métier, limitation, pagination (40 tests)
 npm run test:watch  # tests en continu pendant le développement
 npm run lint        # ESLint
 npx tsc --noEmit    # vérification des types
@@ -292,7 +292,7 @@ La page `/login` affiche ces comptes dans un panneau dépliant. Passez
 
 ### Ces règles sont testées
 
-`npm test` exécute 27 tests.
+`npm test` exécute 40 tests.
 
 Les 15 premiers portent sur les règles métier et tournent contre une base
 SQLite jetable, construite à partir des vraies migrations : cycle complet des
@@ -304,6 +304,10 @@ Les 12 suivants portent sur la limitation des tentatives de connexion. Le
 limiteur reçoit l'instant courant en paramètre, si bien qu'une fenêtre de
 quinze minutes se vérifie en quelques microsecondes et que le résultat ne
 dépend jamais de la vitesse de la machine.
+
+Les 13 derniers portent sur la pagination : qu'aucune ligne ne soit sautée ni
+comptée deux fois en parcourant toutes les pages, qu'une URL bricolée à la main
+retombe sur une page valide, et que les liens de page conservent les filtres.
 
 ### Traçabilité
 
@@ -346,6 +350,9 @@ lib/
   statistiques.ts          calculs du tableau de bord superviseur
   notifications.ts         alertes dérivées des données
   filtres.ts  dates.ts     filtres d'URL, formatage des dates
+  pagination.ts            bornes de page, liens qui gardent les filtres
+  limitation.ts            blocage des tentatives de connexion
+  televersement.ts         enregistrement et contrôle des photos
 proxy.ts                   protection des routes par rôle
 prisma/
   schema.prisma  seed.ts  migrations/
@@ -429,9 +436,20 @@ fichier `prisma.config.ts` réclamant `dotenv` : deux dépendances de plus et un
 client généré hors de `@prisma/client`. La version 6 correspond au flux
 classique décrit dans le cahier des charges.
 
-**Filtres et recherche dans l'URL.** Les listes restent des pages rendues côté
-serveur, une vue filtrée se partage par simple copie du lien, et le bouton
-« précédent » du navigateur se comporte normalement.
+**Filtres, recherche et pagination dans l'URL.** Les listes restent des pages
+rendues côté serveur, une vue filtrée se partage par simple copie du lien, et le
+bouton « précédent » du navigateur se comporte normalement. La navigation entre
+pages est faite de vrais liens : un clic du milieu ouvre la page 3 dans un
+nouvel onglet, et la version imprimée ne montre pas les boutons.
+
+Deux pièges de pagination sont traités explicitement, parce qu'ils ne se voient
+qu'une fois en production :
+
+- changer un filtre depuis la page 5 remettrait devant une liste vide alors que
+  le résultat tient sur une page — `BarreFiltres` efface donc `page` à chaque
+  changement de critère ;
+- `?page=999` ou `?page=-3` bricolés à la main retombent sur une page valide au
+  lieu de produire un `skip` négatif ou un écran vide.
 
 **Notifications dérivées, pas stockées.** Il n'existe pas de table
 `Notification` : chaque alerte est recalculée à partir des interventions. Rien
@@ -497,9 +515,12 @@ comme Leaflet écrivent des attributs `style`. Les supprimer demande de génére
 un *nonce* par requête et de le faire traverser le framework — un travail réel,
 à refaire à chaque montée de version.
 
-**Pas de pagination.** La liste des interventions du superviseur est plafonnée
-à 100 lignes, avec un message quand le plafond est atteint. Suffisant pour une
-démonstration, insuffisant au-delà.
+**Deux listes restent non paginées.** La carte des abonnés
+(`/superviseur/clients`) charge tout, parce qu'une carte paginée n'aurait pas
+de sens. Et l'historique du technicien calcule ses moyennes sur l'ensemble de
+ses interventions terminées : la liste affichée est paginée, mais le calcul de
+la durée moyenne lit encore toutes les lignes — SQLite ne sait pas faire la
+moyenne d'une différence de dates sans SQL brut.
 
 **`notFound()` renvoie 200 au lieu de 404.** Comportement de Next 16 en rendu
 par flux : la réponse a déjà commencé à partir quand la page appelle

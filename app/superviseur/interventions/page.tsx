@@ -16,7 +16,9 @@ import {
   Indicateur,
   Panneau,
 } from "@/components/ui/surfaces";
+import { calculerPagination, lirePage } from "@/lib/pagination";
 import BoutonImpression from "@/components/ui/bouton-impression";
+import Pagination from "@/components/ui/pagination";
 import BarreFiltres from "@/components/interventions/barre-filtres";
 import LigneIntervention from "@/components/interventions/ligne-intervention";
 import AffectationSuperviseur, {
@@ -33,13 +35,21 @@ export default async function InterventionsSuperviseur({
 }) {
   await exigerRole("SUPERVISEUR");
   const parametres = await searchParams;
+  const filtreSql = construireFiltreIntervention(parametres);
+
+  // Le total conditionne les bornes de la requete : il se compte d'abord.
+  const pagination = calculerPagination(
+    await prisma.intervention.count({ where: filtreSql }),
+    lirePage(parametres),
+  );
 
   const [interventions, techniciensBruts, operateurs, sansTechnicien] =
     await Promise.all([
       prisma.intervention.findMany({
-        where: construireFiltreIntervention(parametres),
+        where: filtreSql,
         orderBy: { dateCreation: "desc" },
-        take: 100,
+        skip: pagination.skip,
+        take: pagination.take,
         select: {
           ...selectionListe,
           technicienId: true,
@@ -74,6 +84,8 @@ export default async function InterventionsSuperviseur({
       prisma.intervention.count({ where: { statut: "NOUVELLE" } }),
     ]);
 
+  const filtre = Object.keys(parametres).some((cle) => cle !== "page");
+
   const techniciens: TechnicienAffectable[] = techniciensBruts.map((t) => ({
     id: t.id,
     nom: `${t.utilisateur.prenom} ${t.utilisateur.nom}`,
@@ -83,8 +95,6 @@ export default async function InterventionsSuperviseur({
     disponible: t.disponible,
     chargeEnCours: t._count.interventions,
   }));
-
-  const filtre = Object.keys(parametres).length > 0;
 
   return (
     <div className="mx-auto w-full max-w-6xl px-4 py-8 sm:px-6">
@@ -102,7 +112,15 @@ export default async function InterventionsSuperviseur({
           accent="#64748B"
           precision="à affecter"
         />
-        <Indicateur libelle="Affichées" valeur={interventions.length} />
+        <Indicateur
+          libelle={filtre ? "Résultats" : "Total"}
+          valeur={pagination.total}
+          precision={
+            pagination.pages > 1
+              ? `page ${pagination.page} sur ${pagination.pages}`
+              : undefined
+          }
+        />
         <Indicateur
           libelle="Techniciens actifs"
           valeur={techniciens.length}
@@ -165,12 +183,12 @@ export default async function InterventionsSuperviseur({
         )}
       </Panneau>
 
-      {interventions.length === 100 && (
-        <p className="mt-4 text-center text-xs text-brume">
-          Affichage limité aux 100 interventions les plus récentes. Affinez la
-          recherche pour cibler les plus anciennes.
-        </p>
-      )}
+      <Pagination
+        chemin="/superviseur/interventions"
+        parametres={parametres}
+        etat={pagination}
+        nom="interventions"
+      />
     </div>
   );
 }

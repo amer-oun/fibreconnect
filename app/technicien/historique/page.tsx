@@ -16,8 +16,10 @@ import {
   Indicateur,
   Panneau,
 } from "@/components/ui/surfaces";
+import { calculerPagination, lirePage } from "@/lib/pagination";
 import { NoteEtoiles } from "@/components/ui/note-etoiles";
 import BoutonImpression from "@/components/ui/bouton-impression";
+import Pagination from "@/components/ui/pagination";
 import BarreFiltres from "@/components/interventions/barre-filtres";
 import LigneIntervention from "@/components/interventions/ligne-intervention";
 
@@ -47,15 +49,25 @@ export default async function HistoriqueTechnicien({
     );
   }
 
+  const filtreSql = {
+    AND: [
+      { technicienId: technicien.id, statut: { in: ["TERMINEE", "ANNULEE"] } },
+      construireFiltreIntervention(parametres),
+    ],
+  };
+
+  // Le total conditionne les bornes de la requete : il se compte d'abord.
+  const pagination = calculerPagination(
+    await prisma.intervention.count({ where: filtreSql }),
+    lirePage(parametres),
+  );
+
   const [interventions, toutes] = await Promise.all([
     prisma.intervention.findMany({
-      where: {
-        AND: [
-          { technicienId: technicien.id, statut: { in: ["TERMINEE", "ANNULEE"] } },
-          construireFiltreIntervention(parametres),
-        ],
-      },
+      where: filtreSql,
       orderBy: { dateFin: "desc" },
+      skip: pagination.skip,
+      take: pagination.take,
       select: selectionListe,
     }),
     prisma.intervention.findMany({
@@ -76,7 +88,7 @@ export default async function HistoriqueTechnicien({
   const noteMoyenne =
     notes.length > 0 ? notes.reduce((a, b) => a + b, 0) / notes.length : null;
 
-  const filtre = Object.keys(parametres).length > 0;
+  const filtre = Object.keys(parametres).some((cle) => cle !== "page");
 
   return (
     <div className="mx-auto w-full max-w-5xl px-4 py-8 sm:px-6">
@@ -104,7 +116,15 @@ export default async function HistoriqueTechnicien({
           accent="#F59E0B"
           precision={`${notes.length} avis`}
         />
-        <Indicateur libelle="Affichées" valeur={interventions.length} />
+        <Indicateur
+          libelle={filtre ? "Résultats" : "Dans l’historique"}
+          valeur={pagination.total}
+          precision={
+            pagination.pages > 1
+              ? `page ${pagination.page} sur ${pagination.pages}`
+              : undefined
+          }
+        />
       </div>
 
       <Panneau>
@@ -181,6 +201,13 @@ export default async function HistoriqueTechnicien({
           </div>
         )}
       </Panneau>
+
+      <Pagination
+        chemin="/technicien/historique"
+        parametres={parametres}
+        etat={pagination}
+        nom="interventions"
+      />
     </div>
   );
 }
