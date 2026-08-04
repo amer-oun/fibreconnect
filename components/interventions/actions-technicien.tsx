@@ -74,9 +74,10 @@ export default function ActionsTechnicien({ interventionId, statut }: Props) {
           value={rapport}
           onChange={(e) => setRapport(e.target.value)}
           rows={5}
-          autoFocus
+          // Pas d'`autoFocus` : sur le telephone du technicien, il ferait
+          // surgir le clavier et sauter la page avant qu'il ait pu lire.
           maxLength={2000}
-          placeholder="Exemple : connecteur SC/APC oxydé au PBO, nettoyage puis remplacement de la jarretière. Débit mesuré à 98 Mb/s après intervention."
+          placeholder="Exemple : connecteur SC/APC oxydé au PBO, nettoyage puis remplacement de la jarretière. Débit mesuré à 98 Mb/s après intervention."
           className="mt-2 w-full rounded-net border border-trait bg-white px-3 py-2.5 text-sm leading-relaxed text-nuit placeholder:text-brume focus:border-signal focus:outline-none"
         />
         <p className="mt-1 text-right font-mono text-xs text-brume">
@@ -104,13 +105,22 @@ export default function ActionsTechnicien({ interventionId, statut }: Props) {
         <div className="mt-3 flex gap-2">
           <Bouton
             taille="petit"
-            disabled={enCours || rapport.trim().length < RAPPORT_LONGUEUR_MIN}
-            onClick={() =>
+            disabled={enCours}
+            onClick={() => {
+              // Bouton toujours actif : on explique ce qui manque plutot que
+              // de le griser sans raison visible.
+              if (rapport.trim().length < RAPPORT_LONGUEUR_MIN) {
+                setErreur(
+                  `Le rapport doit faire ${RAPPORT_LONGUEUR_MIN} caractères au minimum : il en manque ${RAPPORT_LONGUEUR_MIN - rapport.trim().length}.`,
+                );
+                document.getElementById(`rapport-${interventionId}`)?.focus();
+                return;
+              }
               appeler("terminer", {
                 rapport: rapport.trim(),
                 photoRapport: photo,
-              })
-            }
+              });
+            }}
           >
             {enCours ? "Enregistrement…" : "Enregistrer le rapport"}
           </Bouton>

@@ -74,7 +74,7 @@ export default function BoutonAnnulation({
         htmlFor={`motif-${interventionId}`}
         className="text-sm font-medium text-nuit"
       >
-        Pourquoi annuler ?
+        Pourquoi annuler ?
       </label>
       <p className="mt-1 text-xs text-ardoise">
         {role === "CLIENT"
@@ -86,7 +86,6 @@ export default function BoutonAnnulation({
         value={motif}
         onChange={(e) => setMotif(e.target.value)}
         maxLength={300}
-        autoFocus
         placeholder={
           role === "CLIENT"
             ? "Exemple : le problème s’est résolu tout seul"

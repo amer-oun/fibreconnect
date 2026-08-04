@@ -14,6 +14,7 @@ export default function ClocheNotifications({
 }) {
   const [ouvert, setOuvert] = useState(false);
   const conteneur = useRef<HTMLDivElement>(null);
+  const declencheur = useRef<HTMLButtonElement>(null);
 
   useEffect(() => {
     if (!ouvert) return;
@@ -24,7 +25,11 @@ export default function ClocheNotifications({
       }
     }
     function surEchap(evenement: KeyboardEvent) {
-      if (evenement.key === "Escape") setOuvert(false);
+      if (evenement.key !== "Escape") return;
+      setOuvert(false);
+      // Sans cela le focus retombe sur le document : la personne qui navigue
+      // au clavier reprend depuis le debut de la page.
+      declencheur.current?.focus();
     }
 
     document.addEventListener("mousedown", surClic);
@@ -40,11 +45,13 @@ export default function ClocheNotifications({
   return (
     <div ref={conteneur} className="relative">
       <button
+        ref={declencheur}
         type="button"
         onClick={() => setOuvert((o) => !o)}
         aria-expanded={ouvert}
-        aria-haspopup="true"
-        className="relative flex size-9 items-center justify-center rounded-net text-brume transition-colors hover:bg-nuit-800 hover:text-ivoire"
+        aria-haspopup="dialog"
+        aria-controls="panneau-notifications"
+        className="relative flex size-9 items-center justify-center rounded-net text-brume transition-colors hover:bg-nuit-800 hover:text-ivoire pointer-coarse:size-11"
       >
         <span className="sr-only">
           {notifications.length > 0
@@ -76,17 +83,24 @@ export default function ClocheNotifications({
       </button>
 
       {ouvert && (
-        <div className="absolute top-11 right-0 z-50 w-[min(22rem,calc(100vw-2rem))] rounded-bloc border border-trait bg-white">
+        <div
+          id="panneau-notifications"
+          role="dialog"
+          aria-label="Alertes à traiter"
+          className="absolute top-11 right-0 z-50 w-[min(22rem,calc(100vw-2rem))] rounded-bloc border border-trait bg-white"
+        >
           <p className="border-b border-trait px-4 py-2.5 font-display text-xs font-semibold tracking-wide text-nuit uppercase">
             À traiter
           </p>
 
+          {/* `overscroll-contain` sur la liste : arrive en bas, la molette ne
+              fait pas defiler la page restee derriere le panneau. */}
           {notifications.length === 0 ? (
             <p className="px-4 py-6 text-center text-sm text-ardoise">
               Rien ne demande votre attention pour le moment.
             </p>
           ) : (
-            <ul className="max-h-96 divide-y divide-trait overflow-y-auto">
+            <ul className="max-h-96 divide-y divide-trait overflow-y-auto overscroll-contain">
               {notifications.map((n) => (
                 <li key={n.id}>
                   <Link

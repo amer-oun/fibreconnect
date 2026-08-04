@@ -40,11 +40,24 @@ export default function FormulairePanne() {
   const [description, setDescription] = useState("");
   const [photo, setPhoto] = useState<string | null>(null);
   const [erreur, setErreur] = useState<string | null>(null);
+  const [erreurDescription, setErreurDescription] = useState<string | null>(null);
   const [enCours, setEnCours] = useState(false);
 
   async function envoyer(evenement: React.FormEvent<HTMLFormElement>) {
     evenement.preventDefault();
     setErreur(null);
+
+    // Le bouton reste actif : on valide ici et on renvoie la personne sur le
+    // champ fautif. Un bouton grise n'explique jamais ce qui manque.
+    if (description.trim().length < 20) {
+      setErreurDescription(
+        `Décrivez la panne en 20 caractères au minimum : il en manque ${20 - description.trim().length}.`,
+      );
+      document.getElementById("description")?.focus();
+      return;
+    }
+
+    setErreurDescription(null);
     setEnCours(true);
 
     const donnees = new FormData(evenement.currentTarget);
@@ -108,9 +121,13 @@ export default function FormulairePanne() {
           minLength={20}
           maxLength={1000}
           value={description}
-          onChange={(e) => setDescription(e.target.value)}
+          onChange={(e) => {
+            setDescription(e.target.value);
+            if (erreurDescription) setErreurDescription(null);
+          }}
+          erreur={erreurDescription ?? undefined}
           indication={AIDES[type]}
-          placeholder="Exemple : depuis hier soir, le voyant PON de la box clignote en rouge et plus aucun appareil n’a de connexion."
+          placeholder="Exemple : depuis hier soir, le voyant PON de la box clignote en rouge et plus aucun appareil n’a de connexion."
         />
         <p className="mt-1.5 text-right font-mono text-xs text-brume">
           {description.length < 20
@@ -130,7 +147,7 @@ export default function FormulairePanne() {
       {erreur && <MessageErreur>{erreur}</MessageErreur>}
 
       <div className="flex flex-wrap gap-3 border-t border-trait pt-5">
-        <Bouton type="submit" disabled={enCours || description.trim().length < 20}>
+        <Bouton type="submit" disabled={enCours}>
           {enCours ? "Enregistrement…" : "Envoyer la déclaration"}
         </Bouton>
         <LienBouton href="/client/dashboard" variante="secondaire">

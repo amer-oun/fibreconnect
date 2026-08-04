@@ -65,7 +65,7 @@ export function LienLateral({ entree }: { entree: EntreeNav }) {
     <Link
       href={entree.href}
       aria-current={actif ? "page" : undefined}
-      className={`flex items-center gap-3 border-l-2 py-2.5 pr-3 pl-4 text-sm transition-colors duration-150 ${
+      className={`flex items-center gap-3 border-l-2 py-2.5 pr-3 pl-4 text-sm transition-colors duration-150 pointer-coarse:min-h-11 ${
         actif
           ? "border-l-signal bg-nuit-800 font-medium text-ivoire"
           : "border-l-transparent text-brume hover:border-l-nuit-600 hover:bg-nuit-800/60 hover:text-ivoire"
@@ -86,7 +86,7 @@ export function LienMobile({ entree }: { entree: EntreeNav }) {
     <Link
       href={entree.href}
       aria-current={actif ? "page" : undefined}
-      className={`flex flex-1 flex-col items-center gap-1 border-t-2 px-1 py-2 text-[0.6875rem] transition-colors duration-150 ${
+      className={`flex min-h-14 flex-1 flex-col items-center justify-center gap-1 border-t-2 px-1 py-2 text-[0.6875rem] transition-colors duration-150 ${
         actif
           ? "border-t-signal text-ivoire"
           : "border-t-transparent text-brume"

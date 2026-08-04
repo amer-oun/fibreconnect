@@ -10,13 +10,12 @@ export function NoteEtoiles({
 }) {
   const dimension = taille === "petit" ? "size-3.5" : "size-4";
 
+  // Pas d'attribut `title` : il ferait annoncer la note deux fois par un
+  // lecteur d'ecran — une fois par le texte cache, une fois par l'infobulle.
   return (
-    <span
-      className="inline-flex items-center gap-0.5"
-      title={`${note} sur ${NOTE_MAX}`}
-    >
+    <span className="inline-flex items-center gap-0.5">
       <span className="sr-only">
-        Note : {note} sur {NOTE_MAX}
+        Note&nbsp;: {note} sur {NOTE_MAX}
       </span>
       {Array.from({ length: NOTE_MAX }).map((_, index) => (
         <svg

@@ -25,10 +25,18 @@ const VARIANTES: Record<VarianteBouton, string> = {
     "bg-signal-profond text-white border-signal-profond hover:bg-nuit hover:border-nuit",
 };
 
+/**
+ * Sizes are dense on a mouse and comfortable on a thumb.
+ *
+ * `pointer-coarse:` raises every button to the 44px minimum on touch screens
+ * without loosening the desktop layout. It matters most for `petit`, which is
+ * what the technician taps — "Accepter l'intervention", "Démarrer" — standing
+ * at a junction box with one hand on his phone.
+ */
 const TAILLES = {
-  normal: "px-4 py-2 text-sm",
-  petit: "px-2.5 py-1.5 text-xs",
-  grand: "px-5 py-2.5 text-base",
+  normal: "px-4 py-2 text-sm pointer-coarse:min-h-11 pointer-coarse:px-4",
+  petit: "px-2.5 py-1.5 text-xs pointer-coarse:min-h-11 pointer-coarse:px-3.5",
+  grand: "px-5 py-2.5 text-base pointer-coarse:min-h-12",
 };
 
 export function classesBouton(
@@ -37,7 +45,10 @@ export function classesBouton(
 ) {
   return [
     "inline-flex items-center justify-center gap-2 rounded-net border font-medium",
+    // On liste les proprietes animees : jamais `transition: all`.
     "transition-colors duration-150",
+    // Supprime le delai de 300 ms du double-tap sur telephone.
+    "touch-manipulation",
     "disabled:cursor-not-allowed disabled:opacity-50",
     VARIANTES[variante],
     TAILLES[taille],

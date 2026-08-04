@@ -29,7 +29,7 @@ export default async function TableauDeBordSuperviseur() {
       <EntetePage
         surtitre="Supervision"
         titre="Tableau de bord"
-        description="Vue d’ensemble des trois réseaux sur lesquels FibreConnect intervient : charge en cours, délais, qualité perçue."
+        description="Vue d’ensemble des trois réseaux sur lesquels FibreConnect intervient : charge en cours, délais, qualité perçue."
         actions={
           <>
             <BoutonImpression libelle="Imprimer le rapport" />

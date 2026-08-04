@@ -50,13 +50,24 @@ export default async function CoquilleApp({
 
   return (
     <div className="flex min-h-screen flex-col lg:flex-row">
+      {/*
+        Premiere cible du clavier : sans elle, il faut traverser toute la
+        navigation a chaque page avant d'atteindre le contenu.
+      */}
+      <a
+        href="#contenu"
+        className="sr-only focus:not-sr-only focus:fixed focus:top-3 focus:left-3 focus:z-50 focus:rounded-net focus:bg-nuit focus:px-4 focus:py-2.5 focus:text-sm focus:font-medium focus:text-ivoire"
+      >
+        Aller au contenu
+      </a>
+
       {/* Rail lateral — ecrans larges */}
       <aside className="sans-impression sticky top-0 hidden h-screen w-60 shrink-0 flex-col border-r border-nuit-700 bg-nuit lg:flex">
         <div className="px-4 py-5">
           <Marque href={entrees[0].href} />
         </div>
 
-        <nav aria-label="Navigation principale" className="flex-1 py-2">
+        <nav aria-label="Navigation principale" className="flex-1 py-2" id="navigation">
           {entrees.map((entree) => (
             <LienLateral key={entree.href} entree={entree} />
           ))}
@@ -92,13 +103,15 @@ export default async function CoquilleApp({
           </div>
         </header>
 
-        <main className="flex-1 pb-20 lg:pb-0">{children}</main>
+        <main id="contenu" tabIndex={-1} className="flex-1 pb-20 lg:pb-0">
+          {children}
+        </main>
       </div>
 
       {/* Barre du bas — telephone */}
       <nav
-        aria-label="Navigation principale"
-        className="sans-impression fixed inset-x-0 bottom-0 z-40 flex border-t border-nuit-700 bg-nuit lg:hidden"
+        aria-label="Navigation principale, barre du bas"
+        className="marge-zone-sure sans-impression fixed inset-x-0 bottom-0 z-40 flex border-t border-nuit-700 bg-nuit lg:hidden"
       >
         {entrees.map((entree) => (
           <LienMobile key={entree.href} entree={entree} />

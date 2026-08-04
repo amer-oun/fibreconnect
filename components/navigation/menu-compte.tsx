@@ -27,15 +27,17 @@ export default function MenuCompte({
         <p className="truncate text-sm font-medium text-ivoire">
           {prenom} {nom}
         </p>
-        <p className="truncate text-xs text-brume" title={email}>
-          {role}
+        {/* Le role est ce qui compte au quotidien ; l'adresse sert a verifier
+            sous quel compte on est, elle reste donc lisible en entier. */}
+        <p className="truncate text-xs text-brume">{role}</p>
+        <p className="truncate font-mono text-[0.6875rem] text-brume/80">
+          {email}
         </p>
       </div>
       <button
         type="button"
         onClick={() => signOut({ callbackUrl: "/login" })}
-        title="Se déconnecter"
-        className="flex size-8 shrink-0 items-center justify-center rounded-net text-brume transition-colors hover:bg-nuit-700 hover:text-ivoire"
+        className="flex size-9 shrink-0 items-center justify-center rounded-net text-brume transition-colors hover:bg-nuit-700 hover:text-ivoire pointer-coarse:size-11"
       >
         <span className="sr-only">Se déconnecter</span>
         <svg

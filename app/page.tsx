@@ -162,7 +162,7 @@ export default async function PageAccueil() {
             FibreConnect — sous-traitant de maintenance fibre optique.
           </p>
           <p className="font-mono">
-            Habilité sur : Tunisie Telecom · Ooredoo · Orange
+            Habilité sur : Tunisie Telecom · Ooredoo · Orange
           </p>
         </div>
       </footer>

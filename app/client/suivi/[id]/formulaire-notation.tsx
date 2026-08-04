@@ -56,7 +56,7 @@ export default function FormulaireNotation({
   return (
     <div className="p-5">
       <p className="text-sm text-ardoise">
-        Votre ligne est rétablie. Comment s’est passée l’intervention ?
+        Votre ligne est rétablie. Comment s’est passée l’intervention ?
       </p>
 
       <div

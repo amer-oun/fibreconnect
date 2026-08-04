@@ -427,6 +427,43 @@ Le sujet est la fibre : de la lumière qui parcourt une distance et s'atténue.
   téléphone, pour que le technicien atteigne la navigation au pouce. Testé
   jusqu'à 375 px de large.
 
+### Ce que « responsive » veut dire ici
+
+Le cahier des charges demande que l'application soit utilisable par un
+technicien debout devant un point de branchement. Cela va au-delà d'une mise en
+page qui se replie :
+
+- **Cibles tactiles de 44 px.** Les boutons d'action — « Accepter
+  l'intervention », « Démarrer » — mesuraient 28 px de haut : trop petits pour
+  un pouce. La variante `pointer-coarse:` les porte à 44 px sur écran tactile
+  **sans** relâcher la densité au clavier-souris.
+- **Délai de double-tap supprimé.** Sans `touch-action: manipulation`, un
+  navigateur mobile attend 300 ms après chaque appui pour voir si un second
+  arrive. Toute l'application paraissait lente.
+- **Encoche respectée.** La barre de navigation du bas était recouverte par
+  l'indicateur d'accueil d'un iPhone. `env(safe-area-inset-bottom)`, combiné à
+  `viewportFit: "cover"`, la repousse au-dessus.
+
+### Accessibilité
+
+- **Lien d'évitement** en première cible du clavier : sans lui, il faut
+  traverser toute la navigation à chaque page avant d'atteindre le contenu.
+- **Focus clavier visible** partout, y compris sur fond sombre, jamais
+  supprimé sans remplacement.
+- **Le panneau d'alertes** est annoncé comme un dialogue, et `Échap` y rend le
+  focus à la cloche plutôt que de le laisser retomber en haut de page.
+- **Aucun bouton grisé sans explication.** Un bouton d'envoi désactivé
+  n'apprend rien : les formulaires restent actifs, valident à la soumission et
+  renvoient la personne sur le champ fautif avec ce qui manque.
+- **Le correcteur orthographique est coupé** sur les adresses e-mail, les
+  matricules et les numéros de contrat, qu'il soulignait en rouge à tort.
+
+### Typographie française
+
+L'espace insécable est posée avant `? ! ; :` et à l'intérieur des guillemets
+`« »`, selon l'usage français — une ponctuation double ne doit jamais se
+retrouver seule en début de ligne.
+
 ---
 
 ## Choix techniques notables

@@ -79,7 +79,7 @@ export default async function ProfilClient() {
           </dl>
           <p className="border-t border-trait px-5 py-3 text-xs text-ardoise">
             Le numéro de contrat et l’opérateur figurent sur votre contrat
-            d’abonnement : ils ne se modifient pas depuis l’application.
+            d’abonnement : ils ne se modifient pas depuis l’application.
           </p>
         </Panneau>
 

@@ -111,7 +111,7 @@ export default function FormulaireTechnicien({
           type="password"
           required
           autoComplete="new-password"
-          indication="8 caractères minimum, une lettre et un chiffre. Communiquez-le au technicien : il pourra le changer depuis son profil."
+          indication="8 caractères minimum, une lettre et un chiffre. Communiquez-le au technicien : il pourra le changer depuis son profil."
         />
       </fieldset>
 

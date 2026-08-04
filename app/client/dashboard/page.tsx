@@ -111,7 +111,7 @@ export default async function TableauDeBordClient({
             message={
               filtre
                 ? "Aucune de vos demandes ne correspond à ces critères. Élargissez la recherche ou effacez les filtres."
-                : "Dès qu’un problème survient sur votre ligne, déclarez-le ici : un technicien de votre opérateur le verra immédiatement."
+                : "Dès qu’un problème survient sur votre ligne, déclarez-le ici : un technicien de votre opérateur le verra immédiatement."
             }
             action={
               !filtre && (

@@ -109,7 +109,7 @@ export default function FormulaireProfil({
               Je suis disponible pour de nouvelles interventions
             </span>
             <span className="mt-0.5 block text-xs text-ardoise">
-              Décochez pendant un congé ou un arrêt : votre superviseur le voit
+              Décochez pendant un congé ou un arrêt : votre superviseur le voit
               immédiatement et cesse de vous affecter des pannes.
             </span>
           </span>

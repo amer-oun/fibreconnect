@@ -64,6 +64,43 @@
     background-color: var(--color-signal);
     color: var(--color-nuit);
   }
+
+  /*
+   * Sans cela, un navigateur mobile attend 300 ms apres chaque appui pour voir
+   * si un second arrive (double-tap = zoom). Toute l'application parait alors
+   * lente au technicien, qui n'utilise que ses pouces.
+   */
+  a,
+  button,
+  select,
+  summary,
+  [role="radio"],
+  input[type="checkbox"] {
+    touch-action: manipulation;
+    /* Le halo gris par defaut d'Android jure avec la palette : on le remplace
+       par un voile cyan discret, coherent avec le reste. */
+    -webkit-tap-highlight-color: color-mix(in srgb, var(--color-signal) 22%, transparent);
+  }
+
+  /* Un titre ne doit pas laisser un mot seul sur la derniere ligne. */
+  h1,
+  h2,
+  h3 {
+    text-wrap: balance;
+  }
+
+  /* Les paragraphes evitent les lignes orphelines sans etre reequilibres. */
+  p {
+    text-wrap: pretty;
+  }
+}
+
+/**
+ * Zone sure : sur un telephone a encoche, la barre de navigation du bas est
+ * recouverte par l'indicateur d'accueil. On repousse son contenu au-dessus.
+ */
+@utility marge-zone-sure {
+  padding-bottom: env(safe-area-inset-bottom, 0px);
 }
 
 @utility eyebrow {

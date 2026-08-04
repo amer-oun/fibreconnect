@@ -27,7 +27,7 @@ export default function PageErreur({
         Le signal s’est interrompu
       </h1>
       <p className="mt-4 max-w-md text-brume">
-        Une erreur a empêché l’affichage de cette page. Réessayez : si le
+        Une erreur a empêché l’affichage de cette page. Réessayez : si le
         problème persiste, revenez à votre espace et signalez-le à votre
         superviseur.
       </p>

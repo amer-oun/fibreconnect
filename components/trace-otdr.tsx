@@ -23,7 +23,7 @@ export default function TraceOtdr({ className = "" }: { className?: string }) {
       viewBox="0 0 900 300"
       className={className}
       role="img"
-      aria-label="Trace de réflectométrie : la puissance optique décroît le long de la fibre, avec un pic à chaque connecteur et à chaque épissure."
+      aria-label="Trace de réflectométrie : la puissance optique décroît le long de la fibre, avec un pic à chaque connecteur et à chaque épissure."
       preserveAspectRatio="xMidYMid meet"
     >
       <defs>

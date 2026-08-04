@@ -62,6 +62,18 @@ type ProprietesCommunes = {
   erreur?: string;
 };
 
+/**
+ * Champs où le correcteur orthographique n'a rien à faire : il souligne en
+ * rouge une adresse e-mail, un matricule ou un numéro de contrat parfaitement
+ * valides, et propose de les « corriger ».
+ */
+const TYPES_SANS_CORRECTION = ["email", "password", "tel", "url"];
+
+function correctionUtile(type: string | undefined, id: string) {
+  if (type && TYPES_SANS_CORRECTION.includes(type)) return false;
+  return !/contrat|matricule|email|identifiant|code/i.test(id);
+}
+
 export function ChampTexte({
   id,
   label,
@@ -81,6 +93,11 @@ export function ChampTexte({
         {...props}
         id={id}
         name={props.name ?? id}
+        spellCheck={props.spellCheck ?? correctionUtile(props.type, id)}
+        autoCapitalize={
+          props.autoCapitalize ??
+          (correctionUtile(props.type, id) ? undefined : "none")
+        }
         aria-invalid={erreur ? true : undefined}
         aria-describedby={
           [indication && `${id}-aide`, erreur && `${id}-erreur`]

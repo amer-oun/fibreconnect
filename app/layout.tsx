@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Archivo, IBM_Plex_Mono, IBM_Plex_Sans } from "next/font/google";
 import "./globals.css";
 
@@ -30,6 +30,19 @@ export const metadata: Metadata = {
   },
   description:
     "Gestion des interventions de maintenance fibre optique : déclaration de panne, suivi client, affectation des techniciens et supervision.",
+};
+
+/**
+ * Sur un telephone, la barre d'adresse prend cette couleur : le bleu nuit de
+ * l'application se prolonge jusqu'en haut de l'ecran au lieu de laisser une
+ * bande blanche au-dessus du bandeau sombre.
+ *
+ * `viewportFit: "cover"` autorise le contenu a passer sous l'encoche — c'est
+ * ce qui rend `env(safe-area-inset-*)` operant sur la barre du bas.
+ */
+export const viewport: Viewport = {
+  themeColor: "#0b1d3a",
+  viewportFit: "cover",
 };
 
 export default function RootLayout({
