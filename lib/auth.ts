@@ -5,9 +5,16 @@ import { z } from "zod";
 
 import { prisma } from "@/lib/prisma";
 import { estRole } from "@/lib/constants";
-
-/** Message renvoye quand le compte existe mais a ete desactive (regle metier 6). */
-export const ERREUR_COMPTE_DESACTIVE = "COMPTE_DESACTIVE";
+import {
+  ERREUR_COMPTE_DESACTIVE,
+  ERREUR_TROP_DE_TENTATIVES,
+} from "@/lib/connexion";
+import {
+  adresseDeLaRequete,
+  enregistrerEchec,
+  oublierEchecs,
+  secondesAvantNouvelleTentative,
+} from "@/lib/limitation";
 
 /**
  * Haché bcrypt d'une valeur qui n'est le mot de passe de personne. Comparé
@@ -37,12 +44,21 @@ export const authOptions: NextAuthOptions = {
         email: { label: "Adresse e-mail", type: "email" },
         motDePasse: { label: "Mot de passe", type: "password" },
       },
-      async authorize(credentials) {
+      async authorize(credentials, requete) {
         // Toute donnee entrante passe par zod, y compris ici.
         const resultat = identifiantsSchema.safeParse(credentials);
         if (!resultat.success) return null;
 
         const { email, motDePasse } = resultat.data;
+        const adresseIp = adresseDeLaRequete(requete?.headers);
+
+        // Avant tout calcul : un compte deja bloque ne doit pas coûter un
+        // bcrypt au serveur, sinon la protection devient elle-meme le levier
+        // d'une saturation.
+        const attente = secondesAvantNouvelleTentative(email, adresseIp);
+        if (attente > 0) {
+          throw new Error(`${ERREUR_TROP_DE_TENTATIVES}:${attente}`);
+        }
 
         const utilisateur = await prisma.utilisateur.findUnique({
           where: { email: email.toLowerCase() },
@@ -54,6 +70,7 @@ export const authOptions: NextAuthOptions = {
         // fraction de milliseconde, ce qui trahirait l'absence du compte.
         if (!utilisateur) {
           await bcrypt.compare(motDePasse, HACHE_LEURRE);
+          enregistrerEchec(email, adresseIp);
           return null;
         }
 
@@ -61,7 +78,16 @@ export const authOptions: NextAuthOptions = {
           motDePasse,
           utilisateur.motDePasse,
         );
-        if (!motDePasseValide) return null;
+        if (!motDePasseValide) {
+          enregistrerEchec(email, adresseIp);
+          return null;
+        }
+
+        // Le mot de passe est le bon : la personne a prouve qui elle est, ses
+        // erreurs precedentes n'ont plus a lui etre comptees. Avant le controle
+        // d'activation, car un compte desactive n'est pas une tentative
+        // d'intrusion.
+        oublierEchecs(email, adresseIp);
 
         // Regle metier 6 : un compte desactive ne peut pas se connecter.
         if (!utilisateur.actif) {

@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { getSession, signIn } from "next-auth/react";
 
 import { ROLE_ACCUEIL } from "@/lib/constants";
-import { ERREUR_COMPTE_DESACTIVE } from "@/lib/auth";
+import { messageDErreurConnexion } from "@/lib/connexion";
 import { Bouton } from "@/components/ui/bouton";
 import { ChampTexte, MessageErreur } from "@/components/ui/champs";
 
@@ -35,11 +35,7 @@ export default function FormulaireConnexion({
     // Attention : `resultat.ok` vaut `true` meme sur un echec, car la requete
     // HTTP aboutit (200). C'est `resultat.error` qui fait foi.
     if (!resultat || resultat.error) {
-      setErreur(
-        resultat?.error === ERREUR_COMPTE_DESACTIVE
-          ? "Ce compte a été désactivé. Contactez votre superviseur."
-          : "Adresse e-mail ou mot de passe incorrect.",
-      );
+      setErreur(messageDErreurConnexion(resultat?.error ?? ""));
       setEnCours(false);
       return;
     }

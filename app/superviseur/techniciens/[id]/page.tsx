@@ -16,6 +16,7 @@ import { BadgeStatut, Reference } from "@/components/ui/badges";
 import { LienBouton } from "@/components/ui/bouton";
 import { NoteEtoiles } from "@/components/ui/note-etoiles";
 import BoutonImpression from "@/components/ui/bouton-impression";
+import VignetteTechnicien from "@/components/ui/vignette-technicien";
 import BasculeCompte from "@/components/techniciens/bascule-compte";
 
 export const metadata: Metadata = { title: "Fiche technicien" };
@@ -36,6 +37,7 @@ export default async function FicheTechnicien({
       specialite: true,
       zone: true,
       disponible: true,
+      photoUrl: true,
       operateur: { select: { nom: true } },
       utilisateur: {
         select: {
@@ -133,6 +135,14 @@ export default async function FicheTechnicien({
               {technicien.specialite} · zone {technicien.zone}
             </span>
           </span>
+        }
+        vignette={
+          <VignetteTechnicien
+            photoUrl={technicien.photoUrl}
+            prenom={technicien.utilisateur.prenom}
+            nom={technicien.utilisateur.nom}
+            taille="grand"
+          />
         }
         actions={
           <>

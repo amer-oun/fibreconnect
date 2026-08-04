@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 
 import { Bouton } from "@/components/ui/bouton";
+import ChampPhoto from "@/components/ui/champ-photo";
 import {
   ChampTexte,
   MessageErreur,
@@ -18,10 +19,12 @@ export default function FormulaireProfil({
     specialite: string;
     zone: string;
     disponible: boolean;
+    photoUrl: string | null;
   };
 }) {
   const router = useRouter();
   const [disponible, setDisponible] = useState(valeurs.disponible);
+  const [photoUrl, setPhotoUrl] = useState(valeurs.photoUrl);
   const [erreur, setErreur] = useState<string | null>(null);
   const [succes, setSucces] = useState(false);
   const [enCours, setEnCours] = useState(false);
@@ -42,6 +45,7 @@ export default function FormulaireProfil({
         specialite: donnees.get("specialite"),
         zone: donnees.get("zone"),
         disponible,
+        photoUrl,
       }),
     });
 
@@ -59,6 +63,14 @@ export default function FormulaireProfil({
 
   return (
     <form onSubmit={envoyer} className="flex flex-col gap-5 p-5" noValidate>
+      <ChampPhoto
+        id="photo-technicien"
+        label="Photo de profil"
+        indication="Elle permet à l’abonné de reconnaître qui sonne à sa porte."
+        valeur={photoUrl}
+        onChange={setPhotoUrl}
+      />
+
       <ChampTexte
         id="telephone"
         label="Téléphone"

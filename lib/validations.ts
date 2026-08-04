@@ -104,6 +104,12 @@ export const profilTechnicienSchema = z.object({
   specialite: texteObligatoire("La spécialité").max(80),
   zone: texteObligatoire("La zone").max(60),
   disponible: z.boolean(),
+  photoUrl: photoFacultative,
+});
+
+/** Logo d'un reseau partenaire, pose par le superviseur. */
+export const logoOperateurSchema = z.object({
+  logoUrl: photoFacultative,
 });
 
 /** Mise a jour du profil client par lui-meme. */

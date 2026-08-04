@@ -4,6 +4,8 @@ import { prisma } from "@/lib/prisma";
 import { exigerRole } from "@/lib/session";
 import { formaterDate } from "@/lib/dates";
 import { EntetePage, Indicateur, Panneau, TitrePanneau } from "@/components/ui/surfaces";
+import VignetteTechnicien from "@/components/ui/vignette-technicien";
+import PastilleOperateur from "@/components/ui/pastille-operateur";
 import FormulaireMotDePasse from "@/components/compte/formulaire-mot-de-passe";
 import FormulaireProfil from "./formulaire-profil";
 
@@ -20,7 +22,8 @@ export default async function ProfilTechnicien() {
       specialite: true,
       zone: true,
       disponible: true,
-      operateur: { select: { nom: true } },
+      photoUrl: true,
+      operateur: { select: { nom: true, logoUrl: true } },
       utilisateur: {
         select: {
           nom: true,
@@ -61,6 +64,14 @@ export default async function ProfilTechnicien() {
         surtitre={technicien.operateur.nom}
         titre={`${technicien.utilisateur.prenom} ${technicien.utilisateur.nom}`}
         description="Vos informations de terrain. Le matricule et le réseau sur lequel vous êtes habilité sont gérés par votre superviseur."
+        vignette={
+          <VignetteTechnicien
+            photoUrl={technicien.photoUrl}
+            prenom={technicien.utilisateur.prenom}
+            nom={technicien.utilisateur.nom}
+            taille="grand"
+          />
+        }
       />
 
       <div className="mb-6 grid grid-cols-2 gap-5 sm:grid-cols-3">
@@ -97,7 +108,12 @@ export default async function ProfilTechnicien() {
             </div>
             <div>
               <dt className="eyebrow">Réseau habilité</dt>
-              <dd className="mt-1 text-sm text-nuit">
+              <dd className="mt-1 flex items-center gap-2 text-sm text-nuit">
+                <PastilleOperateur
+                  nom={technicien.operateur.nom}
+                  logoUrl={technicien.operateur.logoUrl}
+                  taille="petit"
+                />
                 {technicien.operateur.nom}
               </dd>
             </div>
@@ -118,6 +134,7 @@ export default async function ProfilTechnicien() {
               specialite: technicien.specialite,
               zone: technicien.zone,
               disponible: technicien.disponible,
+              photoUrl: technicien.photoUrl,
             }}
           />
         </Panneau>

@@ -33,6 +33,7 @@ export const NAVIGATION: Record<Role, EntreeNav[]> = {
     { libelle: "Interventions", abrege: "Interv.", href: "/superviseur/interventions", icone: "liste" },
     { libelle: "Techniciens", abrege: "Équipe", href: "/superviseur/techniciens", icone: "equipe" },
     { libelle: "Clients", abrege: "Clients", href: "/superviseur/clients", icone: "carte" },
+    { libelle: "Réseaux", abrege: "Réseaux", href: "/superviseur/reseaux", icone: "reseau" },
     { libelle: "Mon compte", abrege: "Compte", href: "/superviseur/profil", icone: "profil" },
   ],
 };

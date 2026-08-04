@@ -7,6 +7,8 @@ import { EntetePage, EtatVide, Indicateur, Panneau } from "@/components/ui/surfa
 import { NoteEtoiles } from "@/components/ui/note-etoiles";
 import BoutonImpression from "@/components/ui/bouton-impression";
 import { LienBouton } from "@/components/ui/bouton";
+import VignetteTechnicien from "@/components/ui/vignette-technicien";
+import PastilleOperateur from "@/components/ui/pastille-operateur";
 import BasculeCompte from "@/components/techniciens/bascule-compte";
 
 export const metadata: Metadata = { title: "Techniciens" };
@@ -42,6 +44,7 @@ export default async function EquipeTechniciens({
         specialite: true,
         zone: true,
         disponible: true,
+        photoUrl: true,
         operateur: { select: { nom: true } },
         utilisateur: {
           select: { nom: true, prenom: true, email: true, telephone: true, actif: true },
@@ -51,7 +54,7 @@ export default async function EquipeTechniciens({
     }),
     prisma.operateur.findMany({
       orderBy: { nom: "asc" },
-      select: { id: true, nom: true },
+      select: { id: true, nom: true, logoUrl: true },
     }),
   ]);
 
@@ -132,12 +135,17 @@ export default async function EquipeTechniciens({
             <Link
               key={o.id}
               href={`/superviseur/techniciens?operateur=${o.id}`}
-              className={`rounded-net border px-2.5 py-1 text-xs transition-colors ${
+              className={`flex items-center gap-1.5 rounded-net border px-2.5 py-1 text-xs transition-colors ${
                 operateur === o.id
                   ? "border-signal-profond bg-ivoire font-medium text-nuit"
                   : "border-trait text-ardoise hover:border-ardoise"
               }`}
             >
+              <PastilleOperateur
+                nom={o.nom}
+                logoUrl={o.logoUrl}
+                taille="petit"
+              />
               {o.nom}
             </Link>
           ))}
@@ -169,7 +177,15 @@ export default async function EquipeTechniciens({
                 }`}
               >
                 <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
-                  <div className="min-w-0 flex-1">
+                  <div className="flex min-w-0 flex-1 gap-3">
+                    <VignetteTechnicien
+                      photoUrl={t.photoUrl}
+                      prenom={t.utilisateur.prenom}
+                      nom={t.utilisateur.nom}
+                      taille="petit"
+                    />
+
+                    <div className="min-w-0 flex-1">
                     <div className="flex flex-wrap items-center gap-2">
                       <Link
                         href={`/superviseur/techniciens/${t.id}`}
@@ -237,6 +253,7 @@ export default async function EquipeTechniciens({
                       ) : (
                         <span className="text-brume italic">Pas encore noté</span>
                       )}
+                    </div>
                     </div>
                   </div>
 

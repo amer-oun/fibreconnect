@@ -49,22 +49,28 @@ export function EntetePage({
   titre,
   description,
   actions,
+  vignette,
 }: {
   surtitre?: ReactNode;
   titre: string;
   description?: ReactNode;
   actions?: ReactNode;
+  /** Portrait affiche a gauche du titre, sur les pages qui designent quelqu'un. */
+  vignette?: ReactNode;
 }) {
   return (
     <header className="mb-6 flex flex-wrap items-end justify-between gap-4 border-b border-trait pb-5">
-      <div className="min-w-0">
-        {surtitre && <p className="eyebrow mb-1.5">{surtitre}</p>}
-        <h1 className="font-display text-2xl font-bold tracking-tight text-nuit sm:text-[1.75rem]">
-          {titre}
-        </h1>
-        {description && (
-          <p className="mt-1.5 max-w-2xl text-sm text-ardoise">{description}</p>
-        )}
+      <div className="flex min-w-0 items-center gap-4">
+        {vignette}
+        <div className="min-w-0">
+          {surtitre && <p className="eyebrow mb-1.5">{surtitre}</p>}
+          <h1 className="font-display text-2xl font-bold tracking-tight text-nuit sm:text-[1.75rem]">
+            {titre}
+          </h1>
+          {description && (
+            <p className="mt-1.5 max-w-2xl text-sm text-ardoise">{description}</p>
+          )}
+        </div>
       </div>
       {actions && <div className="flex flex-wrap gap-2">{actions}</div>}
     </header>

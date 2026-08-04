@@ -8,7 +8,16 @@ export type EntreeNav = {
   href: string;
   /** Court, pour la barre mobile. */
   abrege: string;
-  icone: "liste" | "ajout" | "chantier" | "archive" | "profil" | "equipe" | "carte" | "stats";
+  icone:
+    | "liste"
+    | "ajout"
+    | "chantier"
+    | "archive"
+    | "profil"
+    | "equipe"
+    | "carte"
+    | "stats"
+    | "reseau";
 };
 
 const ICONES: Record<EntreeNav["icone"], React.ReactNode> = {
@@ -20,6 +29,10 @@ const ICONES: Record<EntreeNav["icone"], React.ReactNode> = {
   equipe: <path d="M7 9a2.5 2.5 0 100-5 2.5 2.5 0 000 5zM2 16c0-2.5 2.2-4 5-4s5 1.5 5 4M14 7h4M14 11h4M14 15h4" />,
   carte: <path d="M2 5l5-2 6 2 5-2v12l-5 2-6-2-5 2zM7 3v12M13 5v12" />,
   stats: <path d="M3 17V9M8 17V4M13 17v-6M18 17v-9" />,
+  // Un noeud central relie a trois points : la topologie d'un reseau optique.
+  reseau: (
+    <path d="M10 8.5a1.5 1.5 0 100-3 1.5 1.5 0 000 3zM4 17a1.5 1.5 0 100-3 1.5 1.5 0 000 3zM16 17a1.5 1.5 0 100-3 1.5 1.5 0 000 3zM10 8.5v3M10 11.5L4.8 14M10 11.5L15.2 14" />
+  ),
 };
 
 function Icone({ nom }: { nom: EntreeNav["icone"] }) {

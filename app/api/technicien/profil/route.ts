@@ -34,6 +34,7 @@ export async function PATCH(requete: Request) {
           specialite: donnees.specialite,
           zone: donnees.zone,
           disponible: donnees.disponible,
+          photoUrl: donnees.photoUrl ?? null,
         },
       }),
       prisma.utilisateur.update({

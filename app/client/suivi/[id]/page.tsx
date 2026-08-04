@@ -14,6 +14,7 @@ import { BadgePriorite, BadgeStatut, Reference } from "@/components/ui/badges";
 import { LienBouton } from "@/components/ui/bouton";
 import BoutonImpression from "@/components/ui/bouton-impression";
 import { NoteEtoiles } from "@/components/ui/note-etoiles";
+import VignetteTechnicien from "@/components/ui/vignette-technicien";
 import TimelineIntervention from "@/components/timeline-intervention";
 import BoutonAnnulation from "@/components/interventions/bouton-annulation";
 import Image from "next/image";
@@ -64,6 +65,7 @@ export default async function PageSuivi({
           matricule: true,
           specialite: true,
           zone: true,
+          photoUrl: true,
           utilisateur: { select: { nom: true, prenom: true, telephone: true } },
         },
       },
@@ -210,14 +212,22 @@ export default async function PageSuivi({
             <TitrePanneau>Technicien</TitrePanneau>
             <div className="p-5">
               {intervention.technicien ? (
-                <dl className="space-y-3 text-sm">
-                  <div>
-                    <dt className="eyebrow">Nom</dt>
-                    <dd className="mt-0.5 font-medium text-nuit">
+                <>
+                  {/* Le visage avant la fiche : l'abonne doit pouvoir
+                      reconnaitre la personne qui sonne a sa porte. */}
+                  <div className="mb-4 flex items-center gap-3 border-b border-trait pb-4">
+                    <VignetteTechnicien
+                      photoUrl={intervention.technicien.photoUrl}
+                      prenom={intervention.technicien.utilisateur.prenom}
+                      nom={intervention.technicien.utilisateur.nom}
+                    />
+                    <p className="min-w-0 font-display font-semibold text-nuit">
                       {intervention.technicien.utilisateur.prenom}{" "}
                       {intervention.technicien.utilisateur.nom}
-                    </dd>
+                    </p>
                   </div>
+
+                  <dl className="space-y-3 text-sm">
                   <div>
                     <dt className="eyebrow">Matricule</dt>
                     <dd className="mt-0.5 font-mono text-nuit">
@@ -241,7 +251,8 @@ export default async function PageSuivi({
                       </a>
                     </dd>
                   </div>
-                </dl>
+                  </dl>
+                </>
               ) : (
                 <p className="text-sm text-ardoise">
                   Aucun technicien n’a encore accepté votre demande. Les

@@ -29,6 +29,7 @@ Projet de fin d'études (stage BTP).
 - [Sécurité](#sécurité)
 - [Direction visuelle](#direction-visuelle)
 - [Choix techniques notables](#choix-techniques-notables)
+- [Limites connues](#limites-connues)
 
 ---
 
@@ -55,7 +56,7 @@ Projet de fin d'études (stage BTP).
 /technicien/dashboard           pannes du réseau habilité
 /technicien/mes-interventions   accepter / démarrer / terminer
 /technicien/historique          interventions passées, rapports, notes
-/technicien/profil              spécialité, zone, disponibilité, mot de passe
+/technicien/profil              photo, spécialité, zone, disponibilité, mot de passe
 
 /superviseur/dashboard          statistiques et graphiques
 /superviseur/interventions      affectation, réaffectation, annulation
@@ -63,6 +64,7 @@ Projet de fin d'études (stage BTP).
 /superviseur/techniciens/nouveau  création d'un compte technicien
 /superviseur/techniciens/[id]   fiche complète et journal d'activité
 /superviseur/clients            liste et carte OpenStreetMap
+/superviseur/reseaux            opérateurs partenaires, couverture, logos
 /superviseur/profil             mot de passe
 ```
 
@@ -290,11 +292,18 @@ La page `/login` affiche ces comptes dans un panneau dépliant. Passez
 
 ### Ces règles sont testées
 
-`npm test` exécute 15 tests sur une base SQLite jetable, construite à partir
-des vraies migrations. Ils couvrent le cycle complet des statuts, le refus des
-transitions illégales, l'absence d'écriture d'historique quand une transition
-est refusée, le filtre par réseau, les contrôles de propriété et la notation
+`npm test` exécute 27 tests.
+
+Les 15 premiers portent sur les règles métier et tournent contre une base
+SQLite jetable, construite à partir des vraies migrations : cycle complet des
+statuts, refus des transitions illégales, absence d'écriture d'historique quand
+une transition est refusée, filtre par réseau, contrôles de propriété, notation
 unique.
+
+Les 12 suivants portent sur la limitation des tentatives de connexion. Le
+limiteur reçoit l'instant courant en paramètre, si bien qu'une fenêtre de
+quinze minutes se vérifie en quelques microsecondes et que le résultat ne
+dépend jamais de la vitesse de la machine.
 
 ### Traçabilité
 
@@ -360,7 +369,22 @@ utilisé que pour les formulaires, les graphiques, la carte et les quelques
 - **Validation zod** sur tous les payloads entrants.
 - **Énumération d'adresses** empêchée : une adresse inconnue déclenche quand
   même une comparaison bcrypt, pour que le temps de réponse ne trahisse pas
-  l'existence du compte.
+  l'existence du compte. Mesuré : 50,4 ms contre 50,3 ms, soit 0,2 % d'écart.
+- **Force brute** freinée par deux compteurs indépendants (`lib/limitation.ts`) :
+  5 échecs sur une même adresse e-mail, ou 20 depuis une même adresse IP,
+  bloquent la connexion pendant 15 minutes. Le seuil par IP existe pour arrêter
+  la pulvérisation d'un mot de passe sur beaucoup de comptes, que le compteur
+  par compte ne verrait jamais. Une tentative bloquée est refusée **avant** le
+  calcul bcrypt, pour que la protection ne devienne pas elle-même un moyen de
+  saturer le serveur.
+- **En-têtes de sécurité** posés sur toutes les réponses (`next.config.ts`) :
+  Content-Security-Policy, `X-Frame-Options: DENY`, `X-Content-Type-Options:
+  nosniff`, Referrer-Policy et Permissions-Policy. La CSP n'autorise qu'une
+  seule origine externe, les tuiles OpenStreetMap de la carte.
+- **Photos** servies par une route authentifiée (`/api/photos/[nom]`) et non
+  depuis `public/` : le nom doit correspondre exactement au format UUID que
+  nous générons, ce qui interdit toute remontée de dossier. Le format d'image
+  est vérifié sur les octets du fichier, pas sur son extension.
 - **Redirection ouverte** empêchée : le paramètre `callbackUrl` n'est accepté
   que s'il désigne un chemin interne.
 - **Erreurs techniques** journalisées côté serveur et jamais renvoyées au
@@ -421,15 +445,24 @@ dialogue d'impression de tous les systèmes.
 
 **Aucune information ne dépend d'un seul contrôle.** Le proxy filtre par URL,
 mais chaque page et chaque route API revérifient le rôle *et* la propriété de
-la ressource. Cacher un bouton n'est pas un contrôle d'accès : les 15 tests
+la ressource. Cacher un bouton n'est pas un contrôle d'accès : les tests
 vérifient qu'un technicien ne peut pas toucher l'intervention d'un collègue et
 qu'un abonné ne peut pas lire celle d'un autre, même en appelant l'API
 directement.
 
-**Photos stockées sur le disque local**, dans `/public/televersements`. Le nom
-de fichier est tiré au sort et le format est vérifié sur les octets du fichier,
-pas sur son extension. Limite assumée : un hébergement sans disque persistant
-(certaines plateformes *serverless*) demanderait un stockage objet à la place.
+**Photos stockées sur le disque local**, dans `televersements/` à la racine du
+projet — délibérément **pas** dans `public/`. Un build de production sert
+`public/` depuis un instantané pris au moment de la compilation : un fichier
+écrit ensuite renverrait 404. Elles passent donc par la route `/api/photos/
+[nom]`, qui se comporte de la même façon en développement et en production. Le
+nom de fichier est tiré au sort et le format est vérifié sur les octets du
+fichier, pas sur son extension.
+
+**Logos et portraits dégradent proprement.** Les logos des trois opérateurs
+sont leur propriété et n'accompagnent pas ce dépôt ; le superviseur les
+téléverse depuis `/superviseur/reseaux`. Tant qu'aucun fichier n'est posé,
+l'interface affiche un monogramme (« TT », « OO », « OR ») et les initiales du
+technicien — jamais un carré vide ni une silhouette grise.
 
 **Accessibilité des couleurs.** Les couleurs de statut imposées par le cahier
 des charges ont été passées à un validateur de contraste : « Terminée » (vert)
@@ -440,3 +473,39 @@ libellé, chaque barre de graphique affiche sa valeur, chaque série est nommée
 dans une légende, et le tableau de bord propose une table de repli. La paire de
 couleurs du graphique temporel (`#0891B2` / `#16A34A`) a été choisie parce
 qu'elle passe les six contrôles du validateur.
+
+---
+
+## Limites connues
+
+Elles sont listées ici parce qu'un projet honnête dit où il s'arrête.
+
+**Le blocage des tentatives est en mémoire.** Il repart de zéro au redémarrage
+du serveur et n'est pas partagé entre plusieurs instances. C'est exactement la
+forme de déploiement de cette application — un processus Node à côté d'un
+fichier SQLite — donc la protection est effective ; une mise à l'échelle
+horizontale demanderait un magasin partagé.
+
+**Le blocage par compte peut être retourné contre un utilisateur.** Quelqu'un
+qui connaît une adresse e-mail peut la faire bloquer 15 minutes en échouant
+cinq fois. C'est le compromis classique du verrouillage de compte : on préfère
+une gêne bornée et réversible à une force brute illimitée.
+
+**Deux `'unsafe-inline'` subsistent dans la CSP**, sur les scripts et les
+styles. Next.js publie sa charge d'hydratation en `<script>` inline et Tailwind
+comme Leaflet écrivent des attributs `style`. Les supprimer demande de générer
+un *nonce* par requête et de le faire traverser le framework — un travail réel,
+à refaire à chaque montée de version.
+
+**Pas de pagination.** La liste des interventions du superviseur est plafonnée
+à 100 lignes, avec un message quand le plafond est atteint. Suffisant pour une
+démonstration, insuffisant au-delà.
+
+**`notFound()` renvoie 200 au lieu de 404.** Comportement de Next 16 en rendu
+par flux : la réponse a déjà commencé à partir quand la page appelle
+`notFound()`. La page « introuvable » s'affiche correctement et aucune donnée
+ne fuit — seul le code HTTP est inexact.
+
+**SQLite et disque local.** Le cahier des charges impose SQLite ; la base est un
+fichier et les photos sont à côté. Un hébergement au système de fichiers
+éphémère perdrait les deux à chaque redémarrage.
