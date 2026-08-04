@@ -9,6 +9,14 @@ import { estRole } from "@/lib/constants";
 /** Message renvoye quand le compte existe mais a ete desactive (regle metier 6). */
 export const ERREUR_COMPTE_DESACTIVE = "COMPTE_DESACTIVE";
 
+/**
+ * Haché bcrypt d'une valeur qui n'est le mot de passe de personne. Comparé
+ * lorsque l'adresse e-mail est inconnue, pour que le temps de réponse ne
+ * révèle pas l'existence d'un compte.
+ */
+const HACHE_LEURRE =
+  "$2b$10$N7qk9zkqURoBuunuFsxWdOmV/kxJo.qd1K2FM.47ObQeX9RP4flhK";
+
 const identifiantsSchema = z.object({
   email: z.email(),
   motDePasse: z.string().min(1),
@@ -40,10 +48,12 @@ export const authOptions: NextAuthOptions = {
           where: { email: email.toLowerCase() },
         });
 
-        // Compte inconnu : on compare quand meme contre un faux haché pour que
-        // la reponse prenne le meme temps qu'un vrai echec de mot de passe.
+        // Compte inconnu : on compare quand meme contre un vrai haché bcrypt,
+        // pour que la reponse prenne le meme temps qu'un echec de mot de passe.
+        // Le haché doit etre valide : bcrypt rejette un haché malformé en une
+        // fraction de milliseconde, ce qui trahirait l'absence du compte.
         if (!utilisateur) {
-          await bcrypt.compare(motDePasse, "$2b$10$invalidinvalidinvalidinvalidinvalidinvalidinvalidinvalidin");
+          await bcrypt.compare(motDePasse, HACHE_LEURRE);
           return null;
         }
 

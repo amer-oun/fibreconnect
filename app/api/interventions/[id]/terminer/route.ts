@@ -20,7 +20,9 @@ export async function POST(
   try {
     const utilisateur = await exigerRoleApi("TECHNICIEN");
     const { id } = await params;
-    const { rapport } = rapportSchema.parse(await lireCorps(requete));
+    const { rapport, photoRapport } = rapportSchema.parse(
+      await lireCorps(requete),
+    );
 
     const technicien = await prisma.technicien.findUnique({
       where: { utilisateurId: utilisateur.id },
@@ -38,7 +40,11 @@ export async function POST(
       action: "CLOTURE",
       technicienId: technicien.id,
       commentaire: "Rapport enregistré, intervention clôturée",
-      champs: { dateFin: new Date(), rapport },
+      champs: {
+        dateFin: new Date(),
+        rapport,
+        photoRapport: photoRapport ?? null,
+      },
     });
 
     return reponseOk({ id });

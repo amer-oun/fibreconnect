@@ -6,6 +6,7 @@ import { exigerRole } from "@/lib/session";
 import { EntetePage, EtatVide, Indicateur, Panneau } from "@/components/ui/surfaces";
 import { NoteEtoiles } from "@/components/ui/note-etoiles";
 import BoutonImpression from "@/components/ui/bouton-impression";
+import { LienBouton } from "@/components/ui/bouton";
 import BasculeCompte from "@/components/techniciens/bascule-compte";
 
 export const metadata: Metadata = { title: "Techniciens" };
@@ -82,8 +83,15 @@ export default async function EquipeTechniciens({
       <EntetePage
         surtitre="Supervision"
         titre="Techniciens"
-        description="L’équipe des trois opérateurs. Un compte désactivé ne peut plus se connecter à l’application."
-        actions={<BoutonImpression libelle="Imprimer l’équipe" />}
+        description="L’équipe FibreConnect, réseau par réseau. Un compte désactivé ne peut plus se connecter à l’application."
+        actions={
+          <>
+            <LienBouton href="/superviseur/techniciens/nouveau">
+              Créer un compte technicien
+            </LienBouton>
+            <BoutonImpression libelle="Imprimer l’équipe" />
+          </>
+        }
       />
 
       <div className="mb-6 grid grid-cols-2 gap-5 sm:grid-cols-4">
@@ -109,7 +117,7 @@ export default async function EquipeTechniciens({
       <Panneau>
         {/* Filtre simple : un lien par opérateur, pas de JavaScript nécessaire. */}
         <div className="sans-impression flex flex-wrap items-center gap-2 border-b border-trait px-4 py-3 sm:px-5">
-          <span className="eyebrow mr-1">Opérateur</span>
+          <span className="eyebrow mr-1">Réseau</span>
           <Link
             href="/superviseur/techniciens"
             className={`rounded-net border px-2.5 py-1 text-xs transition-colors ${
@@ -141,7 +149,14 @@ export default async function EquipeTechniciens({
             message={
               filtre
                 ? "Aucun technicien ne correspond à ce filtre."
-                : "Les comptes techniciens sont créés par l’opérateur."
+                : "Créez le premier compte technicien pour commencer à affecter des interventions."
+            }
+            action={
+              !filtre && (
+                <LienBouton href="/superviseur/techniciens/nouveau">
+                  Créer un compte technicien
+                </LienBouton>
+              )
             }
           />
         ) : (
@@ -180,7 +195,7 @@ export default async function EquipeTechniciens({
 
                     <dl className="mt-2 flex flex-wrap gap-x-6 gap-y-1.5 text-xs">
                       <div className="flex gap-1.5">
-                        <dt className="text-brume">Opérateur</dt>
+                        <dt className="text-brume">Réseau</dt>
                         <dd className="text-ardoise">{t.operateur.nom}</dd>
                       </div>
                       <div className="flex gap-1.5">

@@ -67,7 +67,7 @@ export async function POST(
     }
     if (technicien.operateurId !== intervention.client.operateurId) {
       throw new ErreurMetier(
-        "Ce technicien ne travaille pas pour l’opérateur de cet abonné.",
+        "Ce technicien n’est pas habilité sur le réseau de cet abonné.",
       );
     }
     if (intervention.technicienId === technicien.id) {

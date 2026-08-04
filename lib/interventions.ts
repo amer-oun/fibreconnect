@@ -108,6 +108,7 @@ export async function creerIntervention(donnees: {
   typePanne: string;
   priorite: string;
   description: string;
+  photoPanne?: string | null;
 }) {
   return prisma.$transaction(async (tx) => {
     const intervention = await tx.intervention.create({
@@ -116,6 +117,7 @@ export async function creerIntervention(donnees: {
         typePanne: donnees.typePanne,
         priorite: donnees.priorite,
         description: donnees.description,
+        photoPanne: donnees.photoPanne ?? null,
         statut: "NOUVELLE",
       },
     });
@@ -150,6 +152,8 @@ export const selectionListe = {
   dateFin: true,
   rapport: true,
   noteClient: true,
+  photoPanne: true,
+  photoRapport: true,
   client: {
     select: {
       id: true,
@@ -174,17 +178,6 @@ export const selectionListe = {
 export type InterventionListe = Prisma.InterventionGetPayload<{
   select: typeof selectionListe;
 }>;
-
-/**
- * Regle centrale du projet : un technicien ne voit que les interventions
- * NOUVELLE dont le client appartient au meme operateur que lui.
- */
-export function filtreInterventionsDisponibles(operateurId: string) {
-  return {
-    statut: "NOUVELLE",
-    client: { operateurId },
-  } satisfies Prisma.InterventionWhereInput;
-}
 
 /** Verifie qu'une intervention appartient bien au technicien qui agit. */
 export async function exigerProprieteTechnicien(

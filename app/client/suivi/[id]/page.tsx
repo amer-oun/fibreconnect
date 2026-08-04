@@ -15,6 +15,8 @@ import { LienBouton } from "@/components/ui/bouton";
 import BoutonImpression from "@/components/ui/bouton-impression";
 import { NoteEtoiles } from "@/components/ui/note-etoiles";
 import TimelineIntervention from "@/components/timeline-intervention";
+import BoutonAnnulation from "@/components/interventions/bouton-annulation";
+import Image from "next/image";
 import FormulaireNotation from "./formulaire-notation";
 
 export const metadata: Metadata = { title: "Suivi de l’intervention" };
@@ -46,6 +48,8 @@ export default async function PageSuivi({
       dateFin: true,
       rapport: true,
       noteClient: true,
+      photoPanne: true,
+      photoRapport: true,
       clientId: true,
       client: {
         select: {
@@ -107,6 +111,11 @@ export default async function PageSuivi({
         actions={
           <>
             <BoutonImpression libelle="Imprimer la fiche" />
+            <BoutonAnnulation
+              interventionId={intervention.id}
+              statut={intervention.statut}
+              role="CLIENT"
+            />
             <LienBouton href="/client/dashboard" variante="secondaire">
               Mes demandes
             </LienBouton>
@@ -122,6 +131,17 @@ export default async function PageSuivi({
               <p className="leading-relaxed whitespace-pre-line text-nuit">
                 {intervention.description}
               </p>
+              {intervention.photoPanne && (
+                <Image
+                  src={intervention.photoPanne}
+                  alt="Photo jointe à votre déclaration"
+                  width={480}
+                  height={360}
+                  unoptimized
+                  className="mt-4 max-h-72 w-auto rounded-net border border-trait object-contain"
+                />
+              )}
+
               <p className="mt-4 font-mono text-xs text-brume">
                 Déclarée le {formaterDateHeure(intervention.dateCreation)}
               </p>
@@ -145,6 +165,16 @@ export default async function PageSuivi({
                 <p className="leading-relaxed whitespace-pre-line text-nuit">
                   {intervention.rapport}
                 </p>
+                {intervention.photoRapport && (
+                  <Image
+                    src={intervention.photoRapport}
+                    alt="Photo du travail réalisé par le technicien"
+                    width={480}
+                    height={360}
+                    unoptimized
+                    className="mt-4 max-h-72 w-auto rounded-net border border-trait object-contain"
+                  />
+                )}
                 {intervention.dateDebut && intervention.dateFin && (
                   <p className="mt-4 font-mono text-xs text-brume">
                     Durée d’intervention :{" "}

@@ -1,9 +1,17 @@
 # FibreConnect
 
-Application web de gestion des interventions de maintenance fibre optique pour
-une société opérant en Tunisie. Trois profils s'y croisent : l'abonné qui
-déclare une panne, le technicien qui la traite sur le terrain, et le
-superviseur qui arbitre l'ensemble.
+**FibreConnect est un sous-traitant de maintenance fibre optique en Tunisie.**
+Ses techniciens sont ses propres employés, chacun habilité à intervenir sur le
+réseau d'un seul opérateur — Tunisie Telecom, Ooredoo ou Orange. Le superviseur
+est le dispatcheur de FibreConnect : il voit les trois réseaux parce que c'est
+son entreprise qui intervient sur les trois.
+
+Trois profils s'y croisent : l'abonné qui déclare une panne, le technicien qui
+la traite sur le terrain, et le superviseur qui arbitre.
+
+> **Ce que signifie `Technicien.operateurId`** : le réseau sur lequel le
+> technicien est *habilité*, pas son employeur. C'est de là que découle la
+> règle centrale du projet.
 
 Projet de fin d'études (stage BTP).
 
@@ -28,9 +36,9 @@ Projet de fin d'études (stage BTP).
 
 | Rôle | Ce qu'il peut faire |
 |---|---|
-| **Client** | Déclarer une panne, suivre son avancement étape par étape, noter le technicien une fois l'intervention terminée |
-| **Technicien** | Consulter les pannes disponibles **de son opérateur**, les accepter, les démarrer, rédiger le rapport de clôture, gérer son profil |
-| **Superviseur** | Superviser les trois opérateurs : statistiques, affectation manuelle, activation des comptes techniciens, carte des abonnés |
+| **Client** | Déclarer une panne avec photo, suivre son avancement étape par étape, l'annuler, noter le technicien une fois l'intervention terminée |
+| **Technicien** | Consulter les pannes **du réseau sur lequel il est habilité**, les accepter, les démarrer, rédiger le rapport de clôture avec photo, gérer son profil |
+| **Superviseur** | Piloter les trois réseaux : statistiques, affectation manuelle, création et activation des comptes techniciens, carte des abonnés |
 
 ### Pages
 
@@ -40,19 +48,22 @@ Projet de fin d'études (stage BTP).
 /register                       inscription, réservée aux abonnés
 
 /client/dashboard               mes demandes + recherche et filtres
-/client/nouvelle-panne          formulaire de déclaration
-/client/suivi/[id]              timeline, rapport, notation, impression
+/client/nouvelle-panne          déclaration, avec photo facultative
+/client/suivi/[id]              timeline, rapport, notation, annulation, impression
+/client/profil                  coordonnées et mot de passe
 
-/technicien/dashboard           pannes disponibles (filtrées par opérateur)
+/technicien/dashboard           pannes du réseau habilité
 /technicien/mes-interventions   accepter / démarrer / terminer
 /technicien/historique          interventions passées, rapports, notes
-/technicien/profil              spécialité, zone, disponibilité
+/technicien/profil              spécialité, zone, disponibilité, mot de passe
 
 /superviseur/dashboard          statistiques et graphiques
-/superviseur/interventions      affectation et réaffectation manuelles
+/superviseur/interventions      affectation, réaffectation, annulation
 /superviseur/techniciens        équipe, activation des comptes
+/superviseur/techniciens/nouveau  création d'un compte technicien
 /superviseur/techniciens/[id]   fiche complète et journal d'activité
 /superviseur/clients            liste et carte OpenStreetMap
+/superviseur/profil             mot de passe
 ```
 
 ---
@@ -69,6 +80,7 @@ Projet de fin d'études (stage BTP).
 | Validation | zod |
 | Graphiques | recharts |
 | Cartographie | react-leaflet + OpenStreetMap (aucune clé API) |
+| Tests | Vitest, sur une base SQLite jetable |
 
 ---
 
@@ -145,6 +157,8 @@ erDiagram
         datetime dateFin "nullable"
         string   rapport "nullable"
         int      noteClient "nullable 1-5"
+        string   photoPanne "nullable"
+        string   photoRapport "nullable"
     }
 
     Historique {
@@ -201,6 +215,8 @@ L'application démarre sur <http://localhost:3000>.
 ```bash
 npm run build       # build de production
 npm start           # lancer le build de production
+npm test            # tests des règles métier (15 tests)
+npm run test:watch  # tests en continu pendant le développement
 npm run lint        # ESLint
 npx tsc --noEmit    # vérification des types
 npx prisma studio   # explorateur de base de données
@@ -262,11 +278,23 @@ La page `/login` affiche ces comptes dans un panneau dépliant. Passez
 3. Lorsqu'un technicien accepte : statut → `ASSIGNEE` et `technicienId` renseigné.
 4. « Démarrer » → `EN_COURS` + `dateDebut`. « Terminer » → `TERMINEE` +
    `dateFin` + rapport obligatoire d'au moins 10 caractères.
-5. Le superviseur peut affecter ou réaffecter n'importe quelle intervention à
-   n'importe quel technicien du même opérateur, et désactiver un compte
-   technicien (`actif = false`).
+5. Le superviseur peut créer un compte technicien, affecter ou réaffecter
+   n'importe quelle intervention à n'importe quel technicien habilité sur le
+   réseau de l'abonné, et désactiver un compte technicien (`actif = false`).
+   La désactivation n'est jamais bloquée : si des interventions sont encore
+   ouvertes, l'interface les compte et le signale avant de confirmer.
 6. Un utilisateur dont le compte a `actif = false` ne peut pas se connecter.
 7. Le client peut noter (1 à 5) une intervention `TERMINEE`, une seule fois.
+8. Le client comme le superviseur peuvent annuler une intervention tant qu'elle
+   n'est ni terminée ni déjà annulée. Un technicien ne le peut pas.
+
+### Ces règles sont testées
+
+`npm test` exécute 15 tests sur une base SQLite jetable, construite à partir
+des vraies migrations. Ils couvrent le cycle complet des statuts, le refus des
+transitions illégales, l'absence d'écriture d'historique quand une transition
+est refusée, le filtre par réseau, les contrôles de propriété et la notation
+unique.
 
 ### Traçabilité
 
@@ -390,6 +418,18 @@ nécessaire. En contrepartie, il n'y a pas d'état « lu ».
 en page pour le papier via `@media print`, plutôt que d'embarquer une
 bibliothèque PDF. « Enregistrer au format PDF » est disponible dans la boîte de
 dialogue d'impression de tous les systèmes.
+
+**Aucune information ne dépend d'un seul contrôle.** Le proxy filtre par URL,
+mais chaque page et chaque route API revérifient le rôle *et* la propriété de
+la ressource. Cacher un bouton n'est pas un contrôle d'accès : les 15 tests
+vérifient qu'un technicien ne peut pas toucher l'intervention d'un collègue et
+qu'un abonné ne peut pas lire celle d'un autre, même en appelant l'API
+directement.
+
+**Photos stockées sur le disque local**, dans `/public/televersements`. Le nom
+de fichier est tiré au sort et le format est vérifié sur les octets du fichier,
+pas sur son extension. Limite assumée : un hébergement sans disque persistant
+(certaines plateformes *serverless*) demanderait un stockage objet à la place.
 
 **Accessibilité des couleurs.** Les couleurs de statut imposées par le cahier
 des charges ont été passées à un validateur de contraste : « Terminée » (vert)

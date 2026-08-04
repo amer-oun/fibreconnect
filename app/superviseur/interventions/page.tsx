@@ -22,6 +22,7 @@ import LigneIntervention from "@/components/interventions/ligne-intervention";
 import AffectationSuperviseur, {
   type TechnicienAffectable,
 } from "@/components/interventions/affectation-superviseur";
+import BoutonAnnulation from "@/components/interventions/bouton-annulation";
 
 export const metadata: Metadata = { title: "Interventions" };
 
@@ -143,13 +144,20 @@ export default async function InterventionsSuperviseur({
                 afficherClient
                 afficherTechnicien
                 actions={
-                  <AffectationSuperviseur
-                    interventionId={intervention.id}
-                    operateurId={intervention.client.operateurId}
-                    technicienActuelId={intervention.technicienId}
-                    techniciens={techniciens}
-                    statut={intervention.statut}
-                  />
+                  <div className="flex flex-col items-start gap-2 md:items-end">
+                    <AffectationSuperviseur
+                      interventionId={intervention.id}
+                      operateurId={intervention.client.operateurId}
+                      technicienActuelId={intervention.technicienId}
+                      techniciens={techniciens}
+                      statut={intervention.statut}
+                    />
+                    <BoutonAnnulation
+                      interventionId={intervention.id}
+                      statut={intervention.statut}
+                      role="SUPERVISEUR"
+                    />
+                  </div>
                 }
               />
             ))}

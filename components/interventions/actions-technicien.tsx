@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { RAPPORT_LONGUEUR_MIN } from "@/lib/constants";
 import { Bouton } from "@/components/ui/bouton";
 import { MessageErreur } from "@/components/ui/champs";
+import ChampPhoto from "@/components/ui/champ-photo";
 
 /**
  * The three actions a technician performs on an intervention.
@@ -25,6 +26,7 @@ export default function ActionsTechnicien({ interventionId, statut }: Props) {
   const [enCours, setEnCours] = useState(false);
   const [rapportOuvert, setRapportOuvert] = useState(false);
   const [rapport, setRapport] = useState("");
+  const [photo, setPhoto] = useState<string | null>(null);
 
   async function appeler(chemin: string, corps?: unknown) {
     setErreur(null);
@@ -49,6 +51,7 @@ export default function ActionsTechnicien({ interventionId, statut }: Props) {
     setEnCours(false);
     setRapportOuvert(false);
     setRapport("");
+    setPhoto(null);
     router.refresh();
     return true;
   }
@@ -82,6 +85,16 @@ export default function ActionsTechnicien({ interventionId, statut }: Props) {
             : `${rapport.length} caractères`}
         </p>
 
+        <div className="mt-4">
+          <ChampPhoto
+            id={`photo-${interventionId}`}
+            label="Photo du travail réalisé (facultatif)"
+            indication="Elle est visible par l’abonné avec votre rapport."
+            valeur={photo}
+            onChange={setPhoto}
+          />
+        </div>
+
         {erreur && (
           <div className="mt-2">
             <MessageErreur>{erreur}</MessageErreur>
@@ -92,7 +105,12 @@ export default function ActionsTechnicien({ interventionId, statut }: Props) {
           <Bouton
             taille="petit"
             disabled={enCours || rapport.trim().length < RAPPORT_LONGUEUR_MIN}
-            onClick={() => appeler("terminer", { rapport: rapport.trim() })}
+            onClick={() =>
+              appeler("terminer", {
+                rapport: rapport.trim(),
+                photoRapport: photo,
+              })
+            }
           >
             {enCours ? "Enregistrement…" : "Enregistrer le rapport"}
           </Bouton>

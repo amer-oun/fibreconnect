@@ -96,7 +96,7 @@ export default async function PannesDisponibles({
       <EntetePage
         surtitre={`${technicien.operateur.nom} · ${technicien.matricule}`}
         titre="Pannes disponibles"
-        description={`Vous voyez uniquement les pannes déclarées par les abonnés ${technicien.operateur.nom}. Celles des autres opérateurs ne vous sont jamais proposées.`}
+        description={`Vous êtes habilité sur le réseau ${technicien.operateur.nom} : seules les pannes de ses abonnés vous sont proposées. Celles des autres réseaux ne vous sont jamais montrées.`}
       />
 
       <div className="mb-6 grid grid-cols-2 gap-5 sm:grid-cols-4">
@@ -104,7 +104,7 @@ export default async function PannesDisponibles({
           libelle="À prendre"
           valeur={totalOperateur}
           accent="#22D3EE"
-          precision={technicien.operateur.nom}
+          precision={`réseau ${technicien.operateur.nom}`}
         />
         <Indicateur
           libelle="Mes interventions"
@@ -139,7 +139,7 @@ export default async function PannesDisponibles({
             message={
               filtre
                 ? "Aucune panne disponible ne correspond à ces critères. Effacez les filtres pour voir toute la file."
-                : `Aucun abonné ${technicien.operateur.nom} n’a de panne en attente. Cette page se met à jour à chaque nouvelle déclaration.`
+                : `Aucun abonné du réseau ${technicien.operateur.nom} n’a de panne en attente. Cette page se met à jour à chaque nouvelle déclaration.`
             }
           />
         ) : (

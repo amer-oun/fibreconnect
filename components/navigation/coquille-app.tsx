@@ -20,6 +20,7 @@ export const NAVIGATION: Record<Role, EntreeNav[]> = {
   CLIENT: [
     { libelle: "Mes demandes", abrege: "Demandes", href: "/client/dashboard", icone: "liste" },
     { libelle: "Déclarer une panne", abrege: "Déclarer", href: "/client/nouvelle-panne", icone: "ajout" },
+    { libelle: "Mon compte", abrege: "Compte", href: "/client/profil", icone: "profil" },
   ],
   TECHNICIEN: [
     { libelle: "Pannes disponibles", abrege: "Disponibles", href: "/technicien/dashboard", icone: "liste" },
@@ -32,6 +33,7 @@ export const NAVIGATION: Record<Role, EntreeNav[]> = {
     { libelle: "Interventions", abrege: "Interv.", href: "/superviseur/interventions", icone: "liste" },
     { libelle: "Techniciens", abrege: "Équipe", href: "/superviseur/techniciens", icone: "equipe" },
     { libelle: "Clients", abrege: "Clients", href: "/superviseur/clients", icone: "carte" },
+    { libelle: "Mon compte", abrege: "Compte", href: "/superviseur/profil", icone: "profil" },
   ],
 };
 

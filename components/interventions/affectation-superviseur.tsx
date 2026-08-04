@@ -84,7 +84,7 @@ export default function AffectationSuperviseur({
   if (eligibles.length === 0) {
     return (
       <p className="text-xs text-brume italic">
-        Aucun autre technicien disponible chez cet opérateur.
+        Aucun autre technicien habilité sur ce réseau.
       </p>
     );
   }

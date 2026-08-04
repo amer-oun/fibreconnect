@@ -27,8 +27,8 @@ const PORTES = [
     role: "Technicien",
     titre: "Espace technicien",
     phrase:
-      "Consultez les pannes disponibles chez votre opérateur, acceptez celles de votre zone et rédigez votre rapport depuis le terrain.",
-    reperes: ["Filtré par opérateur", "Utilisable sur mobile", "Rapport d’intervention"],
+      "Consultez les pannes du réseau sur lequel vous êtes habilité, acceptez celles de votre zone et rédigez votre rapport depuis le terrain.",
+    reperes: ["Filtré par réseau", "Utilisable sur mobile", "Rapport d’intervention"],
   },
   {
     role: "Superviseur",
@@ -55,16 +55,18 @@ export default async function PageAccueil() {
 
       {/* Thèse de la page : une panne fibre a un point précis, et il se mesure. */}
       <section className="mx-auto w-full max-w-6xl px-5 pt-10 pb-4 sm:pt-16">
-        <p className="eyebrow text-signal">Maintenance fibre optique — Tunisie</p>
+        <p className="eyebrow text-signal">
+          Sous-traitance fibre optique — Tunisie
+        </p>
         <h1 className="mt-4 max-w-3xl font-display text-4xl leading-[1.08] font-bold tracking-tight text-ivoire sm:text-5xl lg:text-6xl">
           Une panne fibre a toujours
           <br />
           un point précis sur la ligne.
         </h1>
         <p className="mt-5 max-w-xl text-lg leading-relaxed text-brume">
-          FibreConnect relie l’abonné qui déclare, le technicien qui intervient
-          et le superviseur qui arbitre — sur une seule chaîne, du signalement
-          au rétablissement.
+          FibreConnect intervient pour le compte des trois opérateurs et relie
+          l’abonné qui déclare, le technicien qui se déplace et le superviseur
+          qui arbitre — sur une seule chaîne, du signalement au rétablissement.
         </p>
 
         <div className="mt-9 flex flex-wrap items-center gap-3">
@@ -157,9 +159,11 @@ export default async function PageAccueil() {
       <footer className="mt-auto border-t border-nuit-700">
         <div className="mx-auto flex w-full max-w-6xl flex-wrap items-center justify-between gap-3 px-5 py-6 text-xs text-ardoise">
           <p>
-            FibreConnect — gestion d’interventions de maintenance fibre optique.
+            FibreConnect — sous-traitant de maintenance fibre optique.
           </p>
-          <p className="font-mono">Tunisie Telecom · Ooredoo · Orange</p>
+          <p className="font-mono">
+            Habilité sur : Tunisie Telecom · Ooredoo · Orange
+          </p>
         </div>
       </footer>
     </div>

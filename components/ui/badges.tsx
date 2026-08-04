@@ -3,7 +3,6 @@ import {
   couleurStatut,
   libellePriorite,
   libelleStatut,
-  libelleTypePanne,
 } from "@/lib/constants";
 
 /**
@@ -39,15 +38,6 @@ export function BadgePriorite({ priorite }: { priorite: string }) {
         </span>
       )}
       {libellePriorite(priorite)}
-    </span>
-  );
-}
-
-/** Type de panne : neutre, sans couleur, pour ne pas concurrencer le statut. */
-export function EtiquetteTypePanne({ type }: { type: string }) {
-  return (
-    <span className="inline-flex items-center rounded-net border border-trait bg-white px-2 py-0.5 text-xs text-ardoise">
-      {libelleTypePanne(type)}
     </span>
   );
 }

@@ -23,12 +23,6 @@ const formatComplet = new Intl.DateTimeFormat("fr-FR", {
   timeZone: FUSEAU,
 });
 
-const formatMois = new Intl.DateTimeFormat("fr-FR", {
-  month: "short",
-  year: "2-digit",
-  timeZone: FUSEAU,
-});
-
 /** `04/08/2026 14:30` */
 export function formaterDateHeure(date: Date | string | null | undefined) {
   if (!date) return "—";
@@ -39,11 +33,6 @@ export function formaterDateHeure(date: Date | string | null | undefined) {
 export function formaterDate(date: Date | string | null | undefined) {
   if (!date) return "—";
   return formatJour.format(new Date(date));
-}
-
-/** `août 26` — pour les axes de graphiques. */
-export function formaterMois(date: Date | string) {
-  return formatMois.format(new Date(date));
 }
 
 /**

@@ -4,6 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { exigerRole } from "@/lib/session";
 import { formaterDate } from "@/lib/dates";
 import { EntetePage, Indicateur, Panneau, TitrePanneau } from "@/components/ui/surfaces";
+import FormulaireMotDePasse from "@/components/compte/formulaire-mot-de-passe";
 import FormulaireProfil from "./formulaire-profil";
 
 export const metadata: Metadata = { title: "Mon profil" };
@@ -59,7 +60,7 @@ export default async function ProfilTechnicien() {
       <EntetePage
         surtitre={technicien.operateur.nom}
         titre={`${technicien.utilisateur.prenom} ${technicien.utilisateur.nom}`}
-        description="Vos informations de terrain. Le matricule et l’opérateur sont gérés par votre superviseur."
+        description="Vos informations de terrain. Le matricule et le réseau sur lequel vous êtes habilité sont gérés par votre superviseur."
       />
 
       <div className="mb-6 grid grid-cols-2 gap-5 sm:grid-cols-3">
@@ -95,7 +96,7 @@ export default async function ProfilTechnicien() {
               </dd>
             </div>
             <div>
-              <dt className="eyebrow">Opérateur</dt>
+              <dt className="eyebrow">Réseau habilité</dt>
               <dd className="mt-1 text-sm text-nuit">
                 {technicien.operateur.nom}
               </dd>
@@ -119,6 +120,11 @@ export default async function ProfilTechnicien() {
               disponible: technicien.disponible,
             }}
           />
+        </Panneau>
+
+        <Panneau>
+          <TitrePanneau>Sécurité</TitrePanneau>
+          <FormulaireMotDePasse />
         </Panneau>
       </div>
     </div>

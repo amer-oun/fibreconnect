@@ -30,6 +30,7 @@ export async function POST(requete: Request) {
       typePanne: donnees.typePanne,
       priorite: donnees.priorite,
       description: donnees.description,
+      photoPanne: donnees.photoPanne ?? null,
     });
 
     return reponseOk({ id: intervention.id }, 201);

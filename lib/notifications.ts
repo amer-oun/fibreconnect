@@ -76,7 +76,7 @@ async function notificationsClient(utilisateurId: string) {
     detail: libelleTypePanne(ligne.intervention.typePanne),
     lien: `/client/suivi/${ligne.intervention.id}`,
     date: ligne.dateAction,
-    ton: ligne.action === "CLOTURE" ? ("info" as const) : ("info" as const),
+    ton: "info" as const,
   }));
 }
 

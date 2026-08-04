@@ -39,7 +39,7 @@ export async function POST(
 
     if (intervention.client.operateurId !== technicien.operateurId) {
       throw new ErreurMetier(
-        "Cette intervention concerne un autre opérateur que le vôtre.",
+        "Cette intervention concerne un réseau sur lequel vous n’êtes pas habilité.",
         403,
       );
     }

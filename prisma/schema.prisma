@@ -36,7 +36,9 @@ model Utilisateur {
   @@index([role])
 }
 
-/// Operateur fibre : Tunisie Telecom, Ooredoo, Orange.
+/// Reseau d'un operateur fibre : Tunisie Telecom, Ooredoo, Orange.
+/// FibreConnect est un sous-traitant : ses techniciens sont ses employes,
+/// habilites chacun a intervenir sur le reseau d'un seul operateur.
 model Operateur {
   id      String  @id @default(cuid())
   nom     String  @unique
@@ -46,8 +48,8 @@ model Operateur {
   techniciens Technicien[]
 }
 
-/// Profil d'un abonne. C'est son operateur qui determine
-/// quels techniciens verront ses pannes.
+/// Profil d'un abonne. L'operateur est celui de son contrat : c'est lui
+/// qui determine quels techniciens verront ses pannes.
 model Client {
   id            String @id @default(cuid())
   utilisateurId String @unique
@@ -65,7 +67,8 @@ model Client {
   @@index([operateurId])
 }
 
-/// Profil d'un technicien, rattache a un seul operateur.
+/// Profil d'un technicien FibreConnect. `operateurId` designe le reseau sur
+/// lequel il est habilite a intervenir, pas son employeur.
 model Technicien {
   id            String  @id @default(cuid())
   utilisateurId String  @unique
@@ -99,6 +102,10 @@ model Intervention {
   dateFin       DateTime?
   rapport       String? // obligatoire (>= 10 caracteres) au passage en TERMINEE
   noteClient    Int? // 1 a 5, une seule fois, uniquement si TERMINEE
+
+  // Photos jointes, stockees dans /public/televersements.
+  photoPanne   String? // prise par le client a la declaration
+  photoRapport String? // prise par le technicien a la cloture
 
   client      Client       @relation(fields: [clientId], references: [id], onDelete: Cascade)
   technicien  Technicien?  @relation(fields: [technicienId], references: [id])

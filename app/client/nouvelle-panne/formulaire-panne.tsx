@@ -15,6 +15,7 @@ import {
   ChampZone,
   MessageErreur,
 } from "@/components/ui/champs";
+import ChampPhoto from "@/components/ui/champ-photo";
 
 /** Ce que chaque type de panne demande de préciser, en clair. */
 const AIDES: Record<string, string> = {
@@ -37,6 +38,7 @@ export default function FormulairePanne() {
   const router = useRouter();
   const [type, setType] = useState<string>("COUPURE_TOTALE");
   const [description, setDescription] = useState("");
+  const [photo, setPhoto] = useState<string | null>(null);
   const [erreur, setErreur] = useState<string | null>(null);
   const [enCours, setEnCours] = useState(false);
 
@@ -54,6 +56,7 @@ export default function FormulairePanne() {
         typePanne: donnees.get("typePanne"),
         priorite: donnees.get("priorite"),
         description: donnees.get("description"),
+        photoPanne: photo,
       }),
     });
 
@@ -115,6 +118,14 @@ export default function FormulairePanne() {
             : `${restant} caractères restants`}
         </p>
       </div>
+
+      <ChampPhoto
+        id="photoPanne"
+        label="Photo (facultatif)"
+        indication="Une photo de votre box, de ses voyants ou du câble abîmé aide le technicien à préparer son intervention."
+        valeur={photo}
+        onChange={setPhoto}
+      />
 
       {erreur && <MessageErreur>{erreur}</MessageErreur>}
 

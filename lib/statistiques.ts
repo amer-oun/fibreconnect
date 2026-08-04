@@ -18,7 +18,6 @@ export async function statistiquesSuperviseur() {
   const [
     parStatut,
     parType,
-    parPriorite,
     interventions,
     techniciens,
     operateurs,
@@ -26,7 +25,6 @@ export async function statistiquesSuperviseur() {
   ] = await Promise.all([
     prisma.intervention.groupBy({ by: ["statut"], _count: true }),
     prisma.intervention.groupBy({ by: ["typePanne"], _count: true }),
-    prisma.intervention.groupBy({ by: ["priorite"], _count: true }),
     prisma.intervention.findMany({
       select: {
         dateCreation: true,
@@ -169,16 +167,8 @@ export async function statistiquesSuperviseur() {
         valeur: t._count,
       }))
       .sort((a, b) => b.valeur - a.valeur),
-    seriePriorites: parPriorite.map((p) => ({
-      priorite: p.priorite,
-      valeur: p._count,
-    })),
     serieMensuelle: mois,
     chargeTechniciens,
     repartitionOperateurs,
   };
 }
-
-export type StatistiquesSuperviseur = Awaited<
-  ReturnType<typeof statistiquesSuperviseur>
->;
