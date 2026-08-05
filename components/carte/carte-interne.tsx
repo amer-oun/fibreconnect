@@ -4,6 +4,8 @@ import "leaflet/dist/leaflet.css";
 import L from "leaflet";
 import { MapContainer, Marker, Popup, TileLayer } from "react-leaflet";
 
+import { ACCENTS } from "@/lib/constants";
+
 export type PointClient = {
   id: string;
   nom: string;
@@ -102,7 +104,7 @@ export default function CarteInterne({ points }: { points: PointClient[] }) {
               <span
                 style={{
                   fontSize: "0.8125rem",
-                  color: point.interventionsOuvertes > 0 ? "#B45309" : "#16A34A",
+                  color: point.interventionsOuvertes > 0 ? "#B45309" : ACCENTS.succes,
                 }}
               >
                 {point.interventionsOuvertes > 0

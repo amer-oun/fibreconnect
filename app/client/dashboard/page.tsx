@@ -3,6 +3,7 @@ import type { Metadata } from "next";
 import { prisma } from "@/lib/prisma";
 import { exigerRole } from "@/lib/session";
 import { selectionListe } from "@/lib/interventions";
+import { ACCENTS } from "@/lib/constants";
 import {
   OPTIONS_PRIORITE,
   OPTIONS_STATUT,
@@ -81,16 +82,16 @@ export default async function TableauDeBordClient({
       />
 
       <div className="mb-6 grid grid-cols-2 gap-5 sm:grid-cols-4">
-        <Indicateur libelle="En cours" valeur={enCours} accent="#F59E0B" />
+        <Indicateur libelle="En cours" valeur={enCours} accent={ACCENTS.attention} />
         <Indicateur
           libelle="Terminées"
           valeur={parStatut.TERMINEE ?? 0}
-          accent="#16A34A"
+          accent={ACCENTS.succes}
         />
         <Indicateur
           libelle="Annulées"
           valeur={parStatut.ANNULEE ?? 0}
-          accent="#DC2626"
+          accent={ACCENTS.danger}
         />
         <Indicateur libelle="Total" valeur={total} />
       </div>

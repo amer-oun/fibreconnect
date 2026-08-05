@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 
 import { exigerRole } from "@/lib/session";
 import { statistiquesSuperviseur } from "@/lib/statistiques";
-import { STATUT_LABELS, type Statut } from "@/lib/constants";
+import { ACCENTS, STATUT_COULEURS, STATUT_LABELS, type Statut } from "@/lib/constants";
 import {
   EntetePage,
   Indicateur,
@@ -45,25 +45,25 @@ export default async function TableauDeBordSuperviseur() {
         <Indicateur
           libelle="Sans technicien"
           valeur={stats.enAttente}
-          accent="#64748B"
+          accent={ACCENTS.neutre}
           precision="en attente d’affectation"
         />
         <Indicateur
           libelle="En traitement"
           valeur={stats.enTraitement}
-          accent="#F59E0B"
+          accent={ACCENTS.attention}
           precision="acceptées ou démarrées"
         />
         <Indicateur
           libelle="Taux de résolution"
           valeur={`${stats.tauxResolution.toFixed(0)} %`}
-          accent="#16A34A"
+          accent={ACCENTS.succes}
           precision={`${stats.terminees} terminées sur ${stats.total}`}
         />
         <Indicateur
           libelle="Note moyenne"
           valeur={stats.noteMoyenne !== null ? stats.noteMoyenne.toFixed(1) : "—"}
-          accent="#0891B2"
+          accent={ACCENTS.signal}
           precision={`${stats.nombreNotes} avis d’abonnés`}
         />
       </div>
@@ -208,10 +208,7 @@ export default async function TableauDeBordSuperviseur() {
               aria-hidden
               className="size-2"
               style={{
-                backgroundColor:
-                  { NOUVELLE: "#64748B", ASSIGNEE: "#2563EB", EN_COURS: "#F59E0B", TERMINEE: "#16A34A", ANNULEE: "#DC2626" }[
-                    s.statut as Statut
-                  ],
+                backgroundColor: STATUT_COULEURS[s.statut as Statut].hex,
               }}
             />
             {STATUT_LABELS[s.statut as Statut]}

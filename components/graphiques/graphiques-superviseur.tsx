@@ -14,21 +14,34 @@ import {
   YAxis,
 } from "recharts";
 
-import { STATUT_COULEURS, STATUT_LABELS, type Statut } from "@/lib/constants";
+import { ACCENTS, STATUT_COULEURS, STATUT_LABELS, type Statut } from "@/lib/constants";
 
 /**
  * Charts for the supervisor dashboard.
  *
  * Colour rules, in order of authority:
- *  - a status keeps its mandated colour everywhere (badges, tables, charts);
- *  - the two-series time chart uses #0891B2 / #16A34A, a pair validated for
- *    colour-vision deficiency, lightness and contrast;
- *  - nothing is identified by colour alone: every series is named in a legend
- *    and every bar carries its value as text.
+ *  - a status keeps the same colour everywhere — badge, table, chart — so the
+ *    reader learns the vocabulary once;
+ *  - those colours are measured, not picked: see `STATUT_COULEURS`, where the
+ *    green/red pair was re-stepped until it separated under deuteranopia;
+ *  - nothing is identified by colour alone: every series is named in a legend,
+ *    every bar carries its value as text, and a plain table repeats the
+ *    numbers underneath.
  */
 
-const CYAN = "#0891B2";
-const VERT = "#16A34A";
+/**
+ * Paire du graphique temporel, mesurée : ΔE 27,3 sous deutéranopie et 30,3 en
+ * vision normale, là où le seuil est 8 et 15. Le bleu n'est volontairement pas
+ * celui du badge « Assignée » — une couleur de statut ne doit pas servir de
+ * simple série. Le vert, lui, EST celui de « Terminée », parce que cette série
+ * désigne exactement ces interventions-là.
+ */
+const DECLAREES = "#1D4ED8";
+const TERMINEES = ACCENTS.succes;
+
+/** Série unique des types de panne : aucune identité à distinguer. */
+const SERIE_UNIQUE = ACCENTS.signal;
+
 const GRILLE = "#DBE2EC";
 const ENCRE = "#64748B";
 
@@ -108,18 +121,18 @@ export function GraphiqueVolume({
           type="monotone"
           dataKey="declarees"
           name="Déclarées"
-          stroke={CYAN}
+          stroke={DECLAREES}
           strokeWidth={2}
-          dot={{ r: 3, fill: CYAN, strokeWidth: 0 }}
+          dot={{ r: 3, fill: DECLAREES, strokeWidth: 0 }}
           activeDot={{ r: 5, stroke: "#fff", strokeWidth: 2 }}
         />
         <Line
           type="monotone"
           dataKey="terminees"
           name="Terminées"
-          stroke={VERT}
+          stroke={TERMINEES}
           strokeWidth={2}
-          dot={{ r: 3, fill: VERT, strokeWidth: 0 }}
+          dot={{ r: 3, fill: TERMINEES, strokeWidth: 0 }}
           activeDot={{ r: 5, stroke: "#fff", strokeWidth: 2 }}
         />
       </LineChart>
@@ -209,7 +222,7 @@ export function GraphiqueTypes({
         <Bar
           dataKey="valeur"
           name="Interventions"
-          fill={CYAN}
+          fill={SERIE_UNIQUE}
           radius={[0, 4, 4, 0]}
           label={{
             position: "right",

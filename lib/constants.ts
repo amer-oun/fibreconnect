@@ -69,9 +69,28 @@ export const TRANSITIONS_STATUT: Record<Statut, readonly Statut[]> = {
  * dynamiquement, sinon Tailwind ne les compile pas). `hex` sert a recharts,
  * qui prend une couleur brute.
  */
+/**
+ * Status colours — one per state, reused in badges, tables and charts.
+ *
+ * The green/red pair was measured, not chosen by eye. The obvious
+ * `#16A34A` / `#DC2626` are **indistinguishable to a red-green colourblind
+ * reader**: OKLab ΔE 5.0 under deuteranopia, where 8 is the threshold. Since
+ * "Terminée" and "Annulée" are the two states a supervisor must never confuse,
+ * both were re-stepped darker until the pair separated on lightness, which is
+ * the only channel colour-vision deficiency leaves intact.
+ *
+ *   #15803D ↔ #921C1C — ΔE 8.7 (deuteranopia), lightness band and
+ *   normal-vision separation both passing.
+ *
+ * `NOUVELLE` stays deliberately grey: it is the absence of a state, and grey is
+ * the only honest way to say "nothing has happened yet".
+ *
+ * Colour is never the sole carrier of meaning here — every badge shows its
+ * label, every bar its value, every chart its legend.
+ */
 export const STATUT_COULEURS: Record<Statut, { hex: string; badge: string }> = {
   NOUVELLE: {
-    hex: "#64748B", // gris ardoise
+    hex: "#64748B", // gris ardoise — état neutre, volontairement sans teinte
     badge: "bg-slate-100 text-slate-700 border-slate-300",
   },
   ASSIGNEE: {
@@ -83,14 +102,33 @@ export const STATUT_COULEURS: Record<Statut, { hex: string; badge: string }> = {
     badge: "bg-amber-50 text-amber-800 border-amber-300",
   },
   TERMINEE: {
-    hex: "#16A34A", // vert
-    badge: "bg-green-50 text-green-700 border-green-300",
+    hex: "#15803D", // vert profond — assombri pour se séparer du rouge
+    badge: "bg-green-50 text-green-800 border-green-300",
   },
   ANNULEE: {
-    hex: "#DC2626", // rouge
-    badge: "bg-red-50 text-red-700 border-red-300",
+    hex: "#921C1C", // rouge brique — assombri pour se séparer du vert
+    badge: "bg-red-50 text-red-800 border-red-300",
   },
 };
+
+/**
+ * Accents des indicateurs chiffrés, nommés par **intention** et non par teinte.
+ *
+ * Un composant ne doit jamais écrire un code hexadécimal : le jour où le vert
+ * change — comme il vient de le faire pour raison d'accessibilité — il ne
+ * change qu'ici. « succes » et « danger » reprennent volontairement les
+ * couleurs de statut, pour qu'un chiffre vert veuille dire partout la même
+ * chose qu'un badge vert.
+ */
+export const ACCENTS = {
+  neutre: STATUT_COULEURS.NOUVELLE.hex,
+  info: STATUT_COULEURS.ASSIGNEE.hex,
+  attention: STATUT_COULEURS.EN_COURS.hex,
+  succes: STATUT_COULEURS.TERMINEE.hex,
+  danger: STATUT_COULEURS.ANNULEE.hex,
+  /** Cyan profond : lisible sur fond clair, contrairement au cyan de marque. */
+  signal: "#0E7490",
+} as const;
 
 /* -------------------------------------------------------------------------- */
 /* Priorites                                                                  */

@@ -3,6 +3,7 @@ import type { Metadata } from "next";
 import { prisma } from "@/lib/prisma";
 import { exigerRole } from "@/lib/session";
 import { selectionListe } from "@/lib/interventions";
+import { ACCENTS } from "@/lib/constants";
 import {
   OPTIONS_PRIORITE,
   OPTIONS_TYPE_PANNE,
@@ -109,7 +110,7 @@ export default async function PannesDisponibles({
         <Indicateur
           libelle="Mes interventions"
           valeur={mesEnCours}
-          accent="#F59E0B"
+          accent={ACCENTS.attention}
           precision="en cours"
         />
         <Indicateur libelle="Ma zone" valeur={technicien.zone} />

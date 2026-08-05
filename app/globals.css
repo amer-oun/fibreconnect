@@ -27,8 +27,8 @@
 
   /* Couleurs de statut, constantes dans toute l'application. */
   --color-alerte: #f59e0b;
-  --color-valide: #16a34a;
-  --color-critique: #dc2626;
+  --color-valide: #15803d;
+  --color-critique: #921c1c;
   --color-assigne: #2563eb;
 
   /* Angles nets : instrument de mesure, pas carte arrondie. */

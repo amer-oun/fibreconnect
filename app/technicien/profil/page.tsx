@@ -3,6 +3,7 @@ import type { Metadata } from "next";
 import { prisma } from "@/lib/prisma";
 import { exigerRole } from "@/lib/session";
 import { formaterDate } from "@/lib/dates";
+import { ACCENTS } from "@/lib/constants";
 import { EntetePage, Indicateur, Panneau, TitrePanneau } from "@/components/ui/surfaces";
 import VignetteTechnicien from "@/components/ui/vignette-technicien";
 import PastilleOperateur from "@/components/ui/pastille-operateur";
@@ -78,7 +79,7 @@ export default async function ProfilTechnicien() {
         <Indicateur
           libelle="Interventions terminées"
           valeur={terminees}
-          accent="#16A34A"
+          accent={ACCENTS.succes}
         />
         <Indicateur
           libelle="Note moyenne"
@@ -87,7 +88,7 @@ export default async function ProfilTechnicien() {
               ? notes._avg.noteClient.toFixed(1)
               : "—"
           }
-          accent="#F59E0B"
+          accent={ACCENTS.attention}
           precision={`${notes._count.noteClient} avis`}
         />
         <Indicateur

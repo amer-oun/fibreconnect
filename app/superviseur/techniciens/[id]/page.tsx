@@ -3,7 +3,7 @@ import { notFound } from "next/navigation";
 
 import { prisma } from "@/lib/prisma";
 import { exigerRole } from "@/lib/session";
-import { libelleTypePanne } from "@/lib/constants";
+import { ACCENTS, libelleTypePanne } from "@/lib/constants";
 import { formaterDate, formaterDateHeure, formaterDuree, heuresEntre } from "@/lib/dates";
 import {
   EntetePage,
@@ -155,11 +155,11 @@ export default async function FicheTechnicien({
       />
 
       <div className="mb-6 grid grid-cols-2 gap-5 lg:grid-cols-5">
-        <Indicateur libelle="En cours" valeur={enCours.length} accent="#F59E0B" />
+        <Indicateur libelle="En cours" valeur={enCours.length} accent={ACCENTS.attention} />
         <Indicateur
           libelle="Terminées"
           valeur={terminees.length}
-          accent="#16A34A"
+          accent={ACCENTS.succes}
         />
         <Indicateur
           libelle="Durée moyenne"
@@ -168,7 +168,7 @@ export default async function FicheTechnicien({
         <Indicateur
           libelle="Note moyenne"
           valeur={noteMoyenne !== null ? noteMoyenne.toFixed(1) : "—"}
-          accent="#0891B2"
+          accent={ACCENTS.signal}
           precision={`${notes.length} avis`}
         />
         <Indicateur

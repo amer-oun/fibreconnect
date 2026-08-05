@@ -3,6 +3,7 @@ import Link from "next/link";
 
 import { prisma } from "@/lib/prisma";
 import { exigerRole } from "@/lib/session";
+import { ACCENTS } from "@/lib/constants";
 import { EntetePage, EtatVide, Indicateur, Panneau } from "@/components/ui/surfaces";
 import { NoteEtoiles } from "@/components/ui/note-etoiles";
 import BoutonImpression from "@/components/ui/bouton-impression";
@@ -98,16 +99,16 @@ export default async function EquipeTechniciens({
       />
 
       <div className="mb-6 grid grid-cols-2 gap-5 sm:grid-cols-4">
-        <Indicateur libelle="Comptes actifs" valeur={actifs} accent="#16A34A" />
+        <Indicateur libelle="Comptes actifs" valeur={actifs} accent={ACCENTS.succes} />
         <Indicateur
           libelle="Désactivés"
           valeur={enrichis.length - actifs}
-          accent="#DC2626"
+          accent={ACCENTS.danger}
         />
         <Indicateur
           libelle="Indisponibles"
           valeur={enrichis.filter((t) => !t.disponible).length}
-          accent="#F59E0B"
+          accent={ACCENTS.attention}
           precision="congé, arrêt"
         />
         <Indicateur

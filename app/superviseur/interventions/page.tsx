@@ -17,6 +17,7 @@ import {
   Panneau,
 } from "@/components/ui/surfaces";
 import { calculerPagination, lirePage } from "@/lib/pagination";
+import { ACCENTS } from "@/lib/constants";
 import BoutonImpression from "@/components/ui/bouton-impression";
 import Pagination from "@/components/ui/pagination";
 import BarreFiltres from "@/components/interventions/barre-filtres";
@@ -109,7 +110,7 @@ export default async function InterventionsSuperviseur({
         <Indicateur
           libelle="Sans technicien"
           valeur={sansTechnicien}
-          accent="#64748B"
+          accent={ACCENTS.neutre}
           precision="à affecter"
         />
         <Indicateur
@@ -124,7 +125,7 @@ export default async function InterventionsSuperviseur({
         <Indicateur
           libelle="Techniciens actifs"
           valeur={techniciens.length}
-          accent="#16A34A"
+          accent={ACCENTS.succes}
         />
         <Indicateur libelle="Opérateurs" valeur={operateurs.length} />
       </div>

@@ -17,6 +17,7 @@ import {
   Panneau,
 } from "@/components/ui/surfaces";
 import { calculerPagination, lirePage } from "@/lib/pagination";
+import { ACCENTS } from "@/lib/constants";
 import { NoteEtoiles } from "@/components/ui/note-etoiles";
 import BoutonImpression from "@/components/ui/bouton-impression";
 import Pagination from "@/components/ui/pagination";
@@ -103,7 +104,7 @@ export default async function HistoriqueTechnicien({
         <Indicateur
           libelle="Terminées"
           valeur={toutes.length}
-          accent="#16A34A"
+          accent={ACCENTS.succes}
         />
         <Indicateur
           libelle="Durée moyenne"
@@ -113,7 +114,7 @@ export default async function HistoriqueTechnicien({
         <Indicateur
           libelle="Note moyenne"
           valeur={noteMoyenne !== null ? noteMoyenne.toFixed(1) : "—"}
-          accent="#F59E0B"
+          accent={ACCENTS.attention}
           precision={`${notes.length} avis`}
         />
         <Indicateur

@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 
 import { prisma } from "@/lib/prisma";
 import { exigerRole } from "@/lib/session";
+import { ACCENTS } from "@/lib/constants";
 import { EntetePage, EtatVide, Indicateur, Panneau, TitrePanneau } from "@/components/ui/surfaces";
 import BoutonImpression from "@/components/ui/bouton-impression";
 import CarteClients from "@/components/carte/carte-clients";
@@ -74,12 +75,12 @@ export default async function ClientsSuperviseur() {
         <Indicateur
           libelle="Interventions ouvertes"
           valeur={enrichis.reduce((s, c) => s + c.ouvertes, 0)}
-          accent="#F59E0B"
+          accent={ACCENTS.attention}
         />
         <Indicateur
           libelle="Localisés"
           valeur={`${points.length}/${enrichis.length}`}
-          accent="#0891B2"
+          accent={ACCENTS.signal}
           precision="coordonnées connues"
         />
       </div>
