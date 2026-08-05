@@ -64,6 +64,20 @@ export function calculerPagination(
 }
 
 /**
+ * Chaîne de requête à passer à un export : les mêmes filtres que la liste
+ * affichée, mais sans `page` — on télécharge tout le résultat, pas l'écran.
+ */
+export function lienExport(parametres: ParametresRecherche): string {
+  const suivants = new URLSearchParams();
+  for (const [cle, valeur] of Object.entries(parametres)) {
+    if (cle === "page") continue;
+    if (typeof valeur === "string" && valeur !== "") suivants.set(cle, valeur);
+  }
+  const requete = suivants.toString();
+  return requete ? `?${requete}` : "";
+}
+
+/**
  * Reconstruit l'adresse d'une page en gardant les filtres en place.
  * La page 1 n'écrit pas `?page=1` : l'adresse canonique d'une liste reste
  * la plus courte.

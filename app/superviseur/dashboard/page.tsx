@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 
 import { exigerRole } from "@/lib/session";
-import { statistiquesSuperviseur } from "@/lib/statistiques";
+import { lireFenetre, statistiquesSuperviseur } from "@/lib/statistiques";
 import { ACCENTS, STATUT_COULEURS, STATUT_LABELS, type Statut } from "@/lib/constants";
 import {
   EntetePage,
@@ -17,12 +17,18 @@ import {
   GraphiqueTypes,
   GraphiqueVolume,
 } from "@/components/graphiques/graphiques-superviseur";
+import SelecteurFenetre from "@/components/graphiques/selecteur-fenetre";
 
 export const metadata: Metadata = { title: "Tableau de bord" };
 
-export default async function TableauDeBordSuperviseur() {
+export default async function TableauDeBordSuperviseur({
+  searchParams,
+}: {
+  searchParams: Promise<{ mois?: string }>;
+}) {
   await exigerRole("SUPERVISEUR");
-  const stats = await statistiquesSuperviseur();
+  const fenetre = lireFenetre((await searchParams).mois);
+  const stats = await statistiquesSuperviseur(fenetre);
 
   return (
     <div className="mx-auto w-full max-w-6xl px-4 py-8 sm:px-6">
@@ -99,8 +105,8 @@ export default async function TableauDeBordSuperviseur() {
 
       <div className="grid gap-6 lg:grid-cols-2">
         <Panneau className="lg:col-span-2">
-          <TitrePanneau>
-            Volume mensuel — déclarations et clôtures sur 6 mois
+          <TitrePanneau actions={<SelecteurFenetre courante={fenetre} />}>
+            Volume mensuel — déclarations et clôtures
           </TitrePanneau>
           <div className="p-4 sm:p-5">
             <GraphiqueVolume donnees={stats.serieMensuelle} />

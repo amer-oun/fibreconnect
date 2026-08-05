@@ -14,7 +14,18 @@ const MOIS_COURTS = [
   "juil.", "août", "sept.", "oct.", "nov.", "déc.",
 ];
 
-export async function statistiquesSuperviseur() {
+/** Fenêtres proposées au-dessus des graphiques. */
+export const FENETRES = [3, 6, 12] as const;
+export type Fenetre = (typeof FENETRES)[number];
+
+export function lireFenetre(valeur: unknown): Fenetre {
+  const nombre = Number(valeur);
+  return (FENETRES as readonly number[]).includes(nombre)
+    ? (nombre as Fenetre)
+    : 6;
+}
+
+export async function statistiquesSuperviseur(fenetre: Fenetre = 6) {
   const [
     parStatut,
     parType,
@@ -87,10 +98,10 @@ export async function statistiquesSuperviseur() {
   const terminees = compteStatut.TERMINEE ?? 0;
   const tauxResolution = total > 0 ? (terminees / total) * 100 : 0;
 
-  /* Volume mensuel sur 6 mois : declarees vs terminees. */
+  /* Volume mensuel sur la fenetre choisie : declarees vs terminees. */
   const maintenant = new Date();
   const mois: { mois: string; declarees: number; terminees: number }[] = [];
-  for (let recul = 5; recul >= 0; recul--) {
+  for (let recul = fenetre - 1; recul >= 0; recul--) {
     const debut = new Date(
       maintenant.getFullYear(),
       maintenant.getMonth() - recul,
@@ -98,8 +109,14 @@ export async function statistiquesSuperviseur() {
     );
     const fin = new Date(debut.getFullYear(), debut.getMonth() + 1, 1);
 
+    // Sur 12 mois, deux « janv. » se suivraient sans l'annee.
+    const etiquette =
+      fenetre >= 12
+        ? `${MOIS_COURTS[debut.getMonth()]} ${String(debut.getFullYear()).slice(2)}`
+        : MOIS_COURTS[debut.getMonth()];
+
     mois.push({
-      mois: MOIS_COURTS[debut.getMonth()],
+      mois: etiquette,
       declarees: interventions.filter(
         (i) => i.dateCreation >= debut && i.dateCreation < fin,
       ).length,

@@ -16,7 +16,8 @@ import {
   Indicateur,
   Panneau,
 } from "@/components/ui/surfaces";
-import { calculerPagination, lirePage } from "@/lib/pagination";
+import { calculerPagination, lienExport, lirePage } from "@/lib/pagination";
+import { classesBouton } from "@/components/ui/bouton";
 import { ACCENTS } from "@/lib/constants";
 import BoutonImpression from "@/components/ui/bouton-impression";
 import Pagination from "@/components/ui/pagination";
@@ -103,7 +104,25 @@ export default async function InterventionsSuperviseur({
         surtitre="Supervision"
         titre="Interventions"
         description="Toutes les interventions des trois opérateurs. Vous pouvez affecter ou réaffecter n’importe laquelle à n’importe quel technicien du même opérateur."
-        actions={<BoutonImpression libelle="Imprimer la liste" />}
+        actions={
+          <>
+            {/* L'export reprend les filtres affichés : ce qu'on voit est ce
+                qu'on télécharge. `page` est retiré — on exporte tout le
+                résultat, pas seulement la page ouverte. */}
+            <a
+              href={`/api/export/interventions${lienExport(parametres)}`}
+              className={classesBouton("secondaire")}
+              download
+            >
+              Exporter en CSV
+              <span className="sr-only">
+                {" "}
+                — {pagination.total} interventions
+              </span>
+            </a>
+            <BoutonImpression libelle="Imprimer la liste" />
+          </>
+        }
       />
 
       <div className="mb-6 grid grid-cols-2 gap-5 sm:grid-cols-4">
