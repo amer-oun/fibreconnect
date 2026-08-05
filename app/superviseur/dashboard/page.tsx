@@ -33,7 +33,6 @@ export default async function TableauDeBordSuperviseur({
   return (
     <div className="mx-auto w-full max-w-6xl px-4 py-8 sm:px-6">
       <EntetePage
-        surtitre="Supervision"
         titre="Tableau de bord"
         description="Vue d’ensemble des trois réseaux sur lesquels FibreConnect intervient : charge en cours, délais, qualité perçue."
         actions={

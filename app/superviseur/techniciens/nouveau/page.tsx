@@ -18,7 +18,6 @@ export default async function NouveauTechnicien() {
   return (
     <div className="mx-auto w-full max-w-3xl px-4 py-8 sm:px-6">
       <EntetePage
-        surtitre="Supervision"
         titre="Créer un compte technicien"
         description="Le compte et la fiche technicien sont créés ensemble. Le technicien pourra se connecter immédiatement avec le mot de passe que vous lui donnez."
       />

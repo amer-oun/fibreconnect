@@ -32,7 +32,6 @@ export default async function ReseauxPartenaires() {
   return (
     <div className="mx-auto w-full max-w-5xl px-4 py-8 sm:px-6">
       <EntetePage
-        surtitre="Supervision"
         titre="Réseaux partenaires"
         description="Les opérateurs pour lesquels FibreConnect intervient. Un technicien ne voit que les pannes des abonnés du réseau sur lequel il est habilité."
       />

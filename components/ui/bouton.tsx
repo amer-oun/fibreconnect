@@ -12,17 +12,24 @@ export type VarianteBouton =
   | "danger"
   | "signal";
 
+/**
+ * Chaque variante porte ses quatre états : repos, survol, appui, désactivé.
+ *
+ * L'état d'appui (`active:`) manquait. Sans lui, un bouton ne répond pas au
+ * doigt : sur un téléphone il n'y a pas de survol, et l'appui était donc le
+ * seul retour possible — il n'existait pas.
+ */
 const VARIANTES: Record<VarianteBouton, string> = {
   principal:
-    "bg-nuit text-ivoire border-nuit hover:bg-nuit-700 hover:border-nuit-700",
+    "bg-nuit text-ivoire border-nuit hover:bg-nuit-700 hover:border-nuit-700 active:bg-nuit-800 active:border-nuit-800",
   secondaire:
-    "bg-white text-nuit border-trait hover:border-ardoise hover:bg-ivoire",
+    "bg-white text-nuit border-trait hover:border-ardoise hover:bg-ivoire active:bg-trait/60",
   discret:
-    "bg-transparent text-ardoise border-transparent hover:text-nuit hover:bg-ivoire",
+    "bg-transparent text-ardoise border-transparent hover:text-nuit hover:bg-ivoire active:bg-trait/60",
   danger:
-    "bg-white text-critique border-red-300 hover:bg-red-50 hover:border-critique",
+    "bg-white text-critique border-red-300 hover:bg-red-50 hover:border-critique active:bg-red-100",
   signal:
-    "bg-signal-profond text-white border-signal-profond hover:bg-nuit hover:border-nuit",
+    "bg-signal-profond text-white border-signal-profond hover:bg-nuit hover:border-nuit active:bg-nuit-800 active:border-nuit-800",
 };
 
 /**

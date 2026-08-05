@@ -101,7 +101,6 @@ export default async function InterventionsSuperviseur({
   return (
     <div className="mx-auto w-full max-w-6xl px-4 py-8 sm:px-6">
       <EntetePage
-        surtitre="Supervision"
         titre="Interventions"
         description="Toutes les interventions des trois opérateurs. Vous pouvez affecter ou réaffecter n’importe laquelle à n’importe quel technicien du même opérateur."
         actions={

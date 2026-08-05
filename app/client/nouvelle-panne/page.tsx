@@ -23,7 +23,6 @@ export default async function PageNouvellePanne() {
   return (
     <div className="mx-auto w-full max-w-3xl px-4 py-8 sm:px-6">
       <EntetePage
-        surtitre="Nouvelle demande"
         titre="Déclarer une panne"
         description="Votre déclaration part immédiatement chez les techniciens de votre opérateur. Plus votre description est précise, plus l’intervention est rapide."
       />

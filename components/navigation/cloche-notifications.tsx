@@ -106,17 +106,25 @@ export default function ClocheNotifications({
                   <Link
                     href={n.lien}
                     onClick={() => setOuvert(false)}
-                    className={`block border-l-2 px-4 py-3 transition-colors hover:bg-ivoire ${
-                      n.ton === "alerte"
-                        ? "border-l-alerte"
-                        : "border-l-transparent"
-                    }`}
+                    className="block px-4 py-3 transition-colors hover:bg-ivoire"
                   >
-                    <p className="text-sm font-medium text-nuit">{n.titre}</p>
-                    <p className="mt-0.5 text-xs text-ardoise">{n.detail}</p>
-                    <p className="mt-1 font-mono text-[0.6875rem] text-brume">
-                      {formaterDelai(n.date)}
-                    </p>
+                    {/* Gouttiere fixe : la pastille d'urgence s'y loge sans
+                        decaler le texte, et les lignes restent alignees qu'il
+                        y ait alerte ou non. */}
+                    <div className="grid grid-cols-[0.875rem_1fr]">
+                      <span aria-hidden className="pt-1.5">
+                        {n.ton === "alerte" && (
+                          <span className="block size-1.5 rounded-full bg-alerte" />
+                        )}
+                      </span>
+                      <div className="min-w-0">
+                        <p className="text-sm font-medium text-nuit">{n.titre}</p>
+                        <p className="mt-0.5 text-xs text-ardoise">{n.detail}</p>
+                        <p className="mt-1 font-mono text-[0.6875rem] text-brume">
+                          {formaterDelai(n.date)}
+                        </p>
+                      </div>
+                    </div>
                   </Link>
                 </li>
               ))}

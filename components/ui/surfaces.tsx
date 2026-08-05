@@ -13,13 +13,15 @@ export function Panneau({
 }: {
   children: ReactNode;
   className?: string;
-  /** Arete gauche cyan : reserve a l'element actif ou mis en avant. */
+  /** Bordure entiere plus soutenue : le panneau sur lequel on agit. */
   accent?: boolean;
 }) {
   return (
     <section
-      className={`rounded-bloc border border-trait bg-white ${
-        accent ? "border-l-2 border-l-signal" : ""
+      className={`rounded-bloc border bg-white ${
+        // Une bordure complete plutot qu'une arete gauche coloree : un liseré
+        // sur un seul cote se lit comme un ornement, pas comme une frontiere.
+        accent ? "border-signal-profond" : "border-trait"
       } ${className}`}
     >
       {children}
@@ -121,7 +123,18 @@ export function EtatVide({
   );
 }
 
-/** Chiffre-cle : une valeur, son libelle, et rien d'autre. */
+/**
+ * Chiffre-clé : une valeur, son libellé, et rien d'autre.
+ *
+ * L'accent est porté par une pastille posée à côté du libellé, pas par un
+ * liseré le long du bloc. Deux raisons : un trait coloré sur un seul côté est
+ * un ornement déguisé en information, et surtout **le chiffre reste à l'encre**
+ * — une valeur écrite en rouge se lit comme une alerte même quand elle n'en est
+ * pas une. La couleur identifie la catégorie ; le chiffre, lui, se lit.
+ *
+ * Le filet supérieur donne au bloc sa structure. C'est la graduation d'un
+ * instrument de mesure, cohérente avec le reste de l'interface.
+ */
 export function Indicateur({
   libelle,
   valeur,
@@ -134,9 +147,18 @@ export function Indicateur({
   accent?: string;
 }) {
   return (
-    <div className="border-l-2 py-1 pl-4" style={{ borderColor: accent ?? "#dbe2ec" }}>
-      <p className="eyebrow">{libelle}</p>
-      <p className="mt-1 font-display text-3xl font-bold tracking-tight text-nuit tabulaire">
+    <div className="border-t border-trait pt-3">
+      <p className="flex items-center gap-1.5">
+        {accent && (
+          <span
+            aria-hidden
+            className="size-1.5 shrink-0 rounded-full"
+            style={{ backgroundColor: accent }}
+          />
+        )}
+        <span className="eyebrow">{libelle}</span>
+      </p>
+      <p className="mt-1.5 font-display text-3xl font-bold tracking-tight text-nuit tabulaire">
         {valeur}
       </p>
       {precision && <p className="mt-0.5 text-xs text-ardoise">{precision}</p>}

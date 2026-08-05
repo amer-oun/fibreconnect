@@ -85,7 +85,6 @@ export default async function EquipeTechniciens({
   return (
     <div className="mx-auto w-full max-w-6xl px-4 py-8 sm:px-6">
       <EntetePage
-        surtitre="Supervision"
         titre="Techniciens"
         description="L’équipe FibreConnect, réseau par réseau. Un compte désactivé ne peut plus se connecter à l’application."
         actions={
@@ -173,8 +172,13 @@ export default async function EquipeTechniciens({
             {enrichis.map((t) => (
               <li
                 key={t.id}
-                className={`border-l-2 px-4 py-4 transition-colors hover:bg-ivoire sm:px-5 ${
-                  t.utilisateur.actif ? "border-l-transparent" : "border-l-critique"
+                /* Un compte desactive est en retrait, pas souligne de rouge :
+                   il n'y a rien d'alarmant a signaler, seulement quelqu'un qui
+                   ne travaille plus. Le badge dit le reste. */
+                className={`px-4 py-4 transition-colors sm:px-5 ${
+                  t.utilisateur.actif
+                    ? "hover:bg-ivoire"
+                    : "bg-ivoire/70 text-ardoise"
                 }`}
               >
                 <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">

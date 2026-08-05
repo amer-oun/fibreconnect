@@ -63,7 +63,6 @@ export default async function ClientsSuperviseur() {
   return (
     <div className="mx-auto w-full max-w-6xl px-4 py-8 sm:px-6">
       <EntetePage
-        surtitre="Supervision"
         titre="Clients"
         description="Les abonnés des trois opérateurs et leur position sur le réseau. Un contour ambré signale une intervention en cours."
         actions={<BoutonImpression libelle="Imprimer la liste" />}
