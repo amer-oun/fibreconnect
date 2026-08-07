@@ -158,6 +158,7 @@ export const selectionListe = {
     select: {
       id: true,
       ville: true,
+      zone: true,
       adresse: true,
       numContrat: true,
       utilisateur: { select: { nom: true, prenom: true, telephone: true } },

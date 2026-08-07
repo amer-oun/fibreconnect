@@ -5,7 +5,9 @@ import {
   NOTE_MIN,
   PRIORITES,
   RAPPORT_LONGUEUR_MIN,
+  STATUTS_COMPTE,
   TYPES_PANNE,
+  ZONES,
 } from "@/lib/constants";
 import { estCheminPhotoValide } from "@/lib/televersement";
 
@@ -39,6 +41,11 @@ const telephoneTunisien = z
     "Numéro de téléphone invalide (ex. +216 20 123 456).",
   );
 
+/** Zone d'intervention : une des valeurs de la liste, jamais du texte libre. */
+const zoneValide = z.enum(ZONES, {
+  message: "Choisissez une zone d’intervention.",
+});
+
 /** Inscription client (page /register). */
 export const inscriptionSchema = z.object({
   prenom: texteObligatoire("Le prénom").max(50),
@@ -49,7 +56,24 @@ export const inscriptionSchema = z.object({
   operateurId: texteObligatoire("L’opérateur"),
   adresse: texteObligatoire("L’adresse").max(160),
   ville: texteObligatoire("La ville").max(60),
+  zone: zoneValide,
   numContrat: texteObligatoire("Le numéro de contrat").max(40),
+});
+
+/**
+ * Inscription d'un technicien par lui-meme (page /register/technicien).
+ *
+ * Aucun matricule ici : c'est le superviseur qui l'attribue en validant le
+ * compte. Le compte est cree en EN_ATTENTE et ne peut pas se connecter avant.
+ */
+export const inscriptionTechnicienSchema = z.object({
+  prenom: texteObligatoire("Le prénom").max(50),
+  nom: texteObligatoire("Le nom").max(50),
+  email: z.email("Adresse e-mail invalide."),
+  telephone: telephoneTunisien,
+  motDePasse: motDePasseFort,
+  specialite: texteObligatoire("La spécialité").max(80),
+  zone: zoneValide,
 });
 
 /** Declaration d'une panne par un client. */
@@ -98,13 +122,23 @@ export const annulationSchema = z.object({
   motif: z.string().trim().max(300).optional(),
 });
 
-/** Mise a jour du profil technicien par lui-meme. */
+/**
+ * Mise a jour du profil technicien par lui-meme.
+ *
+ * La zone n'y figure pas : elle decide quelles pannes il voit, donc la changer
+ * reviendrait a choisir son secteur. C'est une decision d'affectation, elle
+ * reste au superviseur (voir `zoneTechnicienSchema`).
+ */
 export const profilTechnicienSchema = z.object({
   telephone: telephoneTunisien,
   specialite: texteObligatoire("La spécialité").max(80),
-  zone: texteObligatoire("La zone").max(60),
   disponible: z.boolean(),
   photoUrl: photoFacultative,
+});
+
+/** Changement de zone d'un technicien par le superviseur. */
+export const zoneTechnicienSchema = z.object({
+  zone: zoneValide,
 });
 
 /** Logo d'un reseau partenaire, pose par le superviseur. */
@@ -119,6 +153,7 @@ export const profilClientSchema = z.object({
   telephone: telephoneTunisien,
   adresse: texteObligatoire("L’adresse").max(160),
   ville: texteObligatoire("La ville").max(60),
+  zone: zoneValide,
 });
 
 /** Changement de mot de passe, quel que soit le role. */
@@ -144,15 +179,25 @@ export const nouveauTechnicienSchema = z.object({
   email: z.email("Adresse e-mail invalide."),
   telephone: telephoneTunisien,
   motDePasse: motDePasseFort,
-  operateurId: texteObligatoire("Le réseau"),
   matricule: texteObligatoire("Le matricule").max(20),
   specialite: texteObligatoire("La spécialité").max(80),
-  zone: texteObligatoire("La zone").max(60),
+  zone: zoneValide,
 });
 
-/** Activation / desactivation d'un compte technicien par le superviseur. */
+/** Changement d'etat d'un compte technicien par le superviseur. */
 export const statutCompteSchema = z.object({
-  actif: z.boolean(),
+  statutCompte: z.enum(STATUTS_COMPTE, {
+    message: "État de compte inconnu.",
+  }),
+});
+
+/**
+ * Validation d'un technicien inscrit par lui-meme : le superviseur lui donne
+ * son matricule et passe le compte en ACTIF, en une seule etape.
+ */
+export const validationTechnicienSchema = z.object({
+  matricule: texteObligatoire("Le matricule").max(20),
+  zone: zoneValide,
 });
 
 /** Premier message d'erreur lisible, pour les reponses API. */

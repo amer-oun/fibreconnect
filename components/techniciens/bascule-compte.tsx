@@ -6,20 +6,26 @@ import { useRouter } from "next/navigation";
 import { Bouton } from "@/components/ui/bouton";
 
 /**
- * Enable / disable a technician account.
+ * Actions du superviseur sur un compte technicien.
  *
- * A disabled account can no longer log in (business rule 6). The supervisor
- * may disable anyone — the brief grants that unconditionally — so open work
- * is a warning in the confirmation, not a refusal.
+ * Trois états, trois gestes différents :
+ *   - `EN_ATTENTE` → valider, ce qui demande un matricule (voir `FormulaireValidation`) ;
+ *   - `ACTIF` → désactiver, avec confirmation ;
+ *   - `DESACTIVE` → réactiver.
+ *
+ * Un compte désactivé ne peut plus se connecter (règle métier 6). Le
+ * superviseur peut désactiver qui il veut — le cahier des charges le lui
+ * accorde sans condition — donc les interventions ouvertes sont un
+ * avertissement dans la confirmation, jamais un refus.
  */
 export default function BasculeCompte({
   technicienId,
-  actif,
+  statutCompte,
   nom,
   interventionsOuvertes = 0,
 }: {
   technicienId: string;
-  actif: boolean;
+  statutCompte: string;
   nom: string;
   interventionsOuvertes?: number;
 }) {
@@ -27,12 +33,29 @@ export default function BasculeCompte({
   const [erreur, setErreur] = useState<string | null>(null);
   const [enCours, setEnCours] = useState(false);
 
+  // La validation demande un matricule : elle a son propre formulaire, sur la
+  // fiche du technicien. Ici on renvoie vers lui plutôt que de dupliquer.
+  if (statutCompte === "EN_ATTENTE") {
+    return (
+      <a
+        href={`/superviseur/techniciens/${technicienId}`}
+        className="inline-flex items-center justify-center gap-2 rounded-net border border-signal-profond bg-signal-profond px-2.5 py-1.5 text-xs font-medium text-white transition-colors hover:border-nuit hover:bg-nuit pointer-coarse:min-h-11 pointer-coarse:px-3.5"
+      >
+        Examiner la demande
+      </a>
+    );
+  }
+
+  const actif = statutCompte === "ACTIF";
+
   async function basculer() {
     if (actif) {
       const avertissement =
         interventionsOuvertes > 0
           ? `\n\nAttention : ${interventionsOuvertes} intervention${
-              interventionsOuvertes > 1 ? "s lui sont encore affectées" : " lui est encore affectée"
+              interventionsOuvertes > 1
+                ? "s lui sont encore affectées"
+                : " lui est encore affectée"
             }. Pensez à ${interventionsOuvertes > 1 ? "les" : "la"} réaffecter depuis la page Interventions.`
           : "";
 
@@ -51,7 +74,7 @@ export default function BasculeCompte({
     const reponse = await fetch(`/api/techniciens/${technicienId}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ actif: !actif }),
+      body: JSON.stringify({ statutCompte: actif ? "DESACTIVE" : "ACTIF" }),
     });
 
     if (!reponse.ok) {

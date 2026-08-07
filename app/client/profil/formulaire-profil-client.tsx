@@ -3,8 +3,10 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 
+import { OPTIONS_ZONE } from "@/lib/constants";
 import { Bouton } from "@/components/ui/bouton";
 import {
+  ChampSelect,
   ChampTexte,
   MessageErreur,
   MessageSucces,
@@ -19,6 +21,7 @@ export default function FormulaireProfilClient({
     telephone: string;
     adresse: string;
     ville: string;
+    zone: string;
   };
 }) {
   const router = useRouter();
@@ -97,6 +100,15 @@ export default function FormulaireProfilClient({
         required
         defaultValue={valeurs.ville}
         autoComplete="address-level2"
+      />
+
+      <ChampSelect
+        id="zone"
+        label="Zone d’intervention"
+        required
+        defaultValue={valeurs.zone}
+        options={OPTIONS_ZONE}
+        indication="Le gouvernorat dont dépend votre logement. Il détermine quel technicien voit vos pannes."
       />
 
       {erreur && <MessageErreur>{erreur}</MessageErreur>}

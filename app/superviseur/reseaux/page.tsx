@@ -12,9 +12,11 @@ export const metadata: Metadata = { title: "Réseaux partenaires" };
 /**
  * The three networks FibreConnect subcontracts for.
  *
- * Read-only apart from the logo: an operator's name is a business key. The
- * counts are here because they answer the only question a supervisor really
- * asks of this page — is our coverage of each network staffed at all?
+ * Read-only apart from the logo: an operator's name is a business key.
+ *
+ * No technician count here any more — technicians belong to FibreConnect, not
+ * to a network. What decides who handles a fault is the subscriber's zone, so
+ * staffing is measured on the Techniciens page instead.
  */
 export default async function ReseauxPartenaires() {
   await exigerRole("SUPERVISEUR");
@@ -25,7 +27,7 @@ export default async function ReseauxPartenaires() {
       id: true,
       nom: true,
       logoUrl: true,
-      _count: { select: { techniciens: true, clients: true } },
+      _count: { select: { clients: true } },
     },
   });
 
@@ -33,13 +35,11 @@ export default async function ReseauxPartenaires() {
     <div className="mx-auto w-full max-w-5xl px-4 py-8 sm:px-6">
       <EntetePage
         titre="Réseaux partenaires"
-        description="Les opérateurs pour lesquels FibreConnect intervient. Un technicien ne voit que les pannes des abonnés du réseau sur lequel il est habilité."
+        description="Les opérateurs dont FibreConnect dépanne les abonnés. L’opérateur est une information de contrat : il n’influe pas sur le technicien qui intervient."
       />
 
       <div className="flex flex-col gap-6">
         {operateurs.map((operateur) => {
-          const sansTechnicien = operateur._count.techniciens === 0;
-
           return (
             <Panneau key={operateur.id}>
               <TitrePanneau>
@@ -57,12 +57,6 @@ export default async function ReseauxPartenaires() {
                 <div>
                   <dl className="flex flex-wrap gap-x-8 gap-y-3 text-sm">
                     <div>
-                      <dt className="eyebrow">Techniciens habilités</dt>
-                      <dd className="mt-0.5 font-mono text-lg text-nuit">
-                        {operateur._count.techniciens}
-                      </dd>
-                    </div>
-                    <div>
                       <dt className="eyebrow">Abonnés</dt>
                       <dd className="mt-0.5 font-mono text-lg text-nuit">
                         {operateur._count.clients}
@@ -70,20 +64,18 @@ export default async function ReseauxPartenaires() {
                     </div>
                   </dl>
 
-                  {sansTechnicien && operateur._count.clients > 0 && (
-                    <p className="mt-4 rounded-net border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-800">
-                      Aucun technicien n’est habilité sur ce réseau : les pannes
-                      de ses {operateur._count.clients} abonnés ne sont visibles
-                      par personne.{" "}
-                      <Link
-                        href="/superviseur/techniciens/nouveau"
-                        className="underline decoration-2 underline-offset-2"
-                      >
-                        Créer un compte technicien
-                      </Link>
-                      .
-                    </p>
-                  )}
+                  <p className="mt-4 text-xs text-ardoise">
+                    Nos techniciens interviennent sur ce réseau comme sur
+                    l’autre : c’est la zone de l’abonné qui décide qui traite sa
+                    panne, pas son opérateur.{" "}
+                    <Link
+                      href="/superviseur/techniciens"
+                      className="underline decoration-2 underline-offset-2"
+                    >
+                      Voir la couverture par zone
+                    </Link>
+                    .
+                  </p>
                 </div>
 
                 <FormulaireLogo

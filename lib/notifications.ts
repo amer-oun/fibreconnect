@@ -81,19 +81,19 @@ async function notificationsClient(utilisateurId: string) {
 }
 
 /**
- * Le technicien est alerte sur les pannes disponibles de son operateur
+ * Le technicien est alerte sur les pannes disponibles de sa zone
  * (la regle centrale du projet) et sur ses interventions non demarrees.
  */
 async function notificationsTechnicien(utilisateurId: string) {
   const technicien = await prisma.technicien.findUnique({
     where: { utilisateurId },
-    select: { id: true, operateurId: true },
+    select: { id: true, zone: true },
   });
   if (!technicien) return [];
 
   const [disponibles, aDemarrer] = await Promise.all([
     prisma.intervention.findMany({
-      where: { statut: "NOUVELLE", client: { operateurId: technicien.operateurId } },
+      where: { statut: "NOUVELLE", client: { zone: technicien.zone } },
       orderBy: { dateCreation: "desc" },
       take: 6,
       select: {
@@ -132,52 +132,97 @@ async function notificationsTechnicien(utilisateurId: string) {
   ].sort((a, b) => b.date.getTime() - a.date.getTime());
 }
 
-/** Le superviseur voit ce qui stagne. */
+/** Le superviseur voit ce qui stagne, ce qui manque et ce qui attend. */
 async function notificationsSuperviseur() {
-  const [enAttente, indisponibles] = await Promise.all([
-    prisma.intervention.findMany({
-      where: {
-        statut: "NOUVELLE",
-        dateCreation: { lte: new Date(Date.now() - JOUR) },
-      },
-      orderBy: { dateCreation: "asc" },
-      take: 8,
-      select: {
-        id: true,
-        typePanne: true,
-        dateCreation: true,
-        client: {
-          select: { ville: true, operateur: { select: { nom: true } } },
+  const [enAttente, indisponibles, aValider, zonesCouvertes, zonesAbonnes] =
+    await Promise.all([
+      prisma.intervention.findMany({
+        where: {
+          statut: "NOUVELLE",
+          dateCreation: { lte: new Date(Date.now() - JOUR) },
         },
-      },
-    }),
-    prisma.technicien.findMany({
-      where: { OR: [{ disponible: false }, { utilisateur: { actif: false } }] },
-      take: 5,
-      select: {
-        id: true,
-        matricule: true,
-        disponible: true,
-        utilisateur: { select: { nom: true, prenom: true, actif: true } },
-      },
-    }),
-  ]);
+        orderBy: { dateCreation: "asc" },
+        take: 8,
+        select: {
+          id: true,
+          typePanne: true,
+          dateCreation: true,
+          client: { select: { ville: true, zone: true } },
+        },
+      }),
+      prisma.technicien.findMany({
+        where: {
+          utilisateur: { statutCompte: { in: ["ACTIF", "DESACTIVE"] } },
+          OR: [{ disponible: false }, { utilisateur: { statutCompte: "DESACTIVE" } }],
+        },
+        take: 5,
+        select: {
+          id: true,
+          matricule: true,
+          disponible: true,
+          utilisateur: { select: { nom: true, prenom: true, statutCompte: true } },
+        },
+      }),
+      // Techniciens inscrits par eux-memes, en attente de validation.
+      prisma.technicien.findMany({
+        where: { utilisateur: { statutCompte: "EN_ATTENTE" } },
+        take: 8,
+        select: {
+          id: true,
+          zone: true,
+          specialite: true,
+          utilisateur: { select: { nom: true, prenom: true, creeLe: true } },
+        },
+      }),
+      // Zones reellement couvertes par un technicien en activite.
+      prisma.technicien.findMany({
+        where: { utilisateur: { statutCompte: "ACTIF" } },
+        select: { zone: true },
+        distinct: ["zone"],
+      }),
+      // Zones ou vit au moins un abonne.
+      prisma.client.findMany({ select: { zone: true }, distinct: ["zone"] }),
+    ]);
+
+  const couvertes = new Set(zonesCouvertes.map((t) => t.zone));
+  const decouvertes = zonesAbonnes
+    .map((c) => c.zone)
+    .filter((zone) => !couvertes.has(zone));
 
   return [
+    // Une zone sans technicien est la panne la plus grave du systeme : les
+    // pannes qui y tombent ne sont visibles par personne.
+    ...decouvertes.map((zone) => ({
+      id: `zone-${zone}`,
+      titre: `Aucun technicien sur la zone ${zone}`,
+      detail: "Les pannes de cette zone ne sont proposées à personne",
+      lien: "/superviseur/techniciens",
+      date: new Date(),
+      ton: "alerte" as const,
+    })),
+    ...aValider.map((t) => ({
+      id: `valider-${t.id}`,
+      titre: "Inscription technicien à valider",
+      detail: `${t.utilisateur.prenom} ${t.utilisateur.nom} · ${t.specialite} · zone ${t.zone}`,
+      lien: `/superviseur/techniciens/${t.id}`,
+      date: t.utilisateur.creeLe,
+      ton: "alerte" as const,
+    })),
     ...enAttente.map((i) => ({
       id: `attente-${i.id}`,
       titre: "Panne sans technicien depuis plus de 24 h",
-      detail: `${libelleTypePanne(i.typePanne)} · ${i.client.operateur.nom} · ${i.client.ville}`,
+      detail: `${libelleTypePanne(i.typePanne)} · zone ${i.client.zone} · ${i.client.ville}`,
       lien: "/superviseur/interventions",
       date: i.dateCreation,
       ton: "alerte" as const,
     })),
     ...indisponibles.map((t) => ({
       id: `indispo-${t.id}`,
-      titre: t.utilisateur.actif
-        ? "Technicien indisponible"
-        : "Compte technicien désactivé",
-      detail: `${t.utilisateur.prenom} ${t.utilisateur.nom} · ${t.matricule}`,
+      titre:
+        t.utilisateur.statutCompte === "DESACTIVE"
+          ? "Compte technicien désactivé"
+          : "Technicien indisponible",
+      detail: `${t.utilisateur.prenom} ${t.utilisateur.nom}${t.matricule ? ` · ${t.matricule}` : ""}`,
       lien: `/superviseur/techniciens/${t.id}`,
       date: new Date(),
       ton: "info" as const,

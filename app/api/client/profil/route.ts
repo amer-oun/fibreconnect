@@ -31,7 +31,11 @@ export async function PATCH(requete: Request) {
     await prisma.$transaction([
       prisma.client.update({
         where: { id: client.id },
-        data: { adresse: donnees.adresse, ville: donnees.ville },
+        data: {
+          adresse: donnees.adresse,
+          ville: donnees.ville,
+          zone: donnees.zone,
+        },
       }),
       prisma.utilisateur.update({
         where: { id: utilisateur.id },

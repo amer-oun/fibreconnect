@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { signIn } from "next-auth/react";
 
+import { OPTIONS_ZONE } from "@/lib/constants";
 import { Bouton } from "@/components/ui/bouton";
 import { ChampSelect, ChampTexte, MessageErreur } from "@/components/ui/champs";
 
@@ -91,7 +92,7 @@ export default function FormulaireInscription({
           id="operateurId"
           label="Opérateur"
           required
-          indication="Seuls les techniciens de cet opérateur verront vos pannes."
+          indication="Le fournisseur avec lequel vous avez signé votre contrat fibre."
           options={operateurs.map((o) => ({ valeur: o.id, libelle: o.nom }))}
         />
         <ChampTexte
@@ -113,7 +114,14 @@ export default function FormulaireInscription({
           label="Ville"
           required
           autoComplete="address-level2"
-          placeholder="Tunis"
+          placeholder="La Marsa"
+        />
+        <ChampSelect
+          id="zone"
+          label="Zone d’intervention"
+          required
+          options={OPTIONS_ZONE}
+          indication="Le gouvernorat dont dépend votre logement. C’est lui qui détermine le technicien qui se déplacera."
         />
       </fieldset>
 

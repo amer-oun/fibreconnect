@@ -13,24 +13,30 @@ export const metadata: Metadata = { title: "Clients" };
 const COULEURS_OPERATEUR: Record<string, string> = {
   "Tunisie Telecom": "#0891B2",
   Ooredoo: "#B45309",
-  Orange: "#7C3AED",
 };
 
 export default async function ClientsSuperviseur() {
   await exigerRole("SUPERVISEUR");
 
   const clients = await prisma.client.findMany({
-    orderBy: [{ operateur: { nom: "asc" } }, { ville: "asc" }],
+    orderBy: [{ zone: "asc" }, { ville: "asc" }],
     select: {
       id: true,
       adresse: true,
       ville: true,
+      zone: true,
       numContrat: true,
       latitude: true,
       longitude: true,
       operateur: { select: { nom: true } },
       utilisateur: {
-        select: { nom: true, prenom: true, telephone: true, email: true, actif: true },
+        select: {
+          nom: true,
+          prenom: true,
+          telephone: true,
+          email: true,
+          statutCompte: true,
+        },
       },
       interventions: { select: { statut: true } },
     },
@@ -51,6 +57,7 @@ export default async function ClientsSuperviseur() {
       nom: `${c.utilisateur.prenom} ${c.utilisateur.nom}`,
       adresse: c.adresse,
       ville: c.ville,
+      zone: c.zone,
       numContrat: c.numContrat,
       operateur: c.operateur.nom,
       latitude: c.latitude!,
@@ -58,19 +65,19 @@ export default async function ClientsSuperviseur() {
       interventionsOuvertes: c.ouvertes,
     }));
 
-  const villes = new Set(enrichis.map((c) => c.ville));
+  const zones = new Set(enrichis.map((c) => c.zone));
 
   return (
     <div className="mx-auto w-full max-w-6xl px-4 py-8 sm:px-6">
       <EntetePage
         titre="Clients"
-        description="Les abonnés des trois opérateurs et leur position sur le réseau. Un contour ambré signale une intervention en cours."
+        description="Les abonnés et leur position. La zone décide du technicien qui intervient ; un contour ambré signale une intervention en cours."
         actions={<BoutonImpression libelle="Imprimer la liste" />}
       />
 
       <div className="mb-6 grid grid-cols-2 gap-5 sm:grid-cols-4">
         <Indicateur libelle="Abonnés" valeur={enrichis.length} />
-        <Indicateur libelle="Villes couvertes" valeur={villes.size} />
+        <Indicateur libelle="Zones desservies" valeur={zones.size} />
         <Indicateur
           libelle="Interventions ouvertes"
           valeur={enrichis.reduce((s, c) => s + c.ouvertes, 0)}
@@ -122,13 +129,13 @@ export default async function ClientsSuperviseur() {
               <table className="w-full text-sm">
                 <thead>
                   <tr className="border-b border-trait text-left">
-                    {["Abonné", "Opérateur", "Contrat", "Ville", "Téléphone", "Interventions"].map(
+                    {["Abonné", "Zone", "Opérateur", "Contrat", "Ville", "Téléphone", "Interventions"].map(
                       (entete, index) => (
                         <th
                           key={entete}
                           scope="col"
                           className={`px-4 py-2.5 font-display text-xs font-semibold tracking-wide text-ardoise uppercase whitespace-nowrap ${
-                            index === 5 ? "text-right" : ""
+                            index === 6 ? "text-right" : ""
                           }`}
                         >
                           {entete}
@@ -142,15 +149,20 @@ export default async function ClientsSuperviseur() {
                     <tr key={c.id} className="hover:bg-ivoire">
                       <th scope="row" className="px-4 py-3 text-left font-medium whitespace-nowrap text-nuit">
                         {c.utilisateur.prenom} {c.utilisateur.nom}
-                        {!c.utilisateur.actif && (
+                        {c.utilisateur.statutCompte !== "ACTIF" && (
                           <span className="ml-2 text-xs font-normal text-critique">
-                            désactivé
+                            {c.utilisateur.statutCompte === "EN_ATTENTE"
+                              ? "en attente"
+                              : "désactivé"}
                           </span>
                         )}
                         <span className="mt-0.5 block text-xs font-normal text-ardoise">
                           {c.adresse}
                         </span>
                       </th>
+                      <td className="px-4 py-3 whitespace-nowrap text-ardoise">
+                        {c.zone}
+                      </td>
                       <td className="px-4 py-3 whitespace-nowrap">
                         <span className="inline-flex items-center gap-1.5 text-ardoise">
                           <span

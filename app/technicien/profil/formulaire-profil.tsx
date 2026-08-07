@@ -17,7 +17,6 @@ export default function FormulaireProfil({
   valeurs: {
     telephone: string;
     specialite: string;
-    zone: string;
     disponible: boolean;
     photoUrl: string | null;
   };
@@ -43,7 +42,6 @@ export default function FormulaireProfil({
       body: JSON.stringify({
         telephone: donnees.get("telephone"),
         specialite: donnees.get("specialite"),
-        zone: donnees.get("zone"),
         disponible,
         photoUrl,
       }),
@@ -86,14 +84,6 @@ export default function FormulaireProfil({
         required
         defaultValue={valeurs.specialite}
         placeholder="Raccordement FTTH, soudure optique…"
-      />
-
-      <ChampTexte
-        id="zone"
-        label="Zone d’intervention"
-        required
-        defaultValue={valeurs.zone}
-        placeholder="Tunis, Ariana…"
       />
 
       <div className="rounded-net border border-trait bg-ivoire p-4">

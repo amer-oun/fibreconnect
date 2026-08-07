@@ -25,8 +25,9 @@ export const metadata: Metadata = { title: "Pannes disponibles" };
 /**
  * The central rule of the project, on screen.
  *
- * A technician only ever sees NOUVELLE interventions whose client belongs to
- * the same operator. The filter is applied in the query, not in the view.
+ * A technician only ever sees NOUVELLE interventions whose subscriber sits in
+ * the same zone. The filter is applied in the query, not in the view — hiding
+ * rows client-side would still have sent them over the wire.
  */
 export default async function PannesDisponibles({
   searchParams,
@@ -43,8 +44,6 @@ export default async function PannesDisponibles({
       zone: true,
       matricule: true,
       disponible: true,
-      operateurId: true,
-      operateur: { select: { nom: true } },
     },
   });
 
@@ -59,16 +58,18 @@ export default async function PannesDisponibles({
     );
   }
 
-  const [disponibles, mesEnCours, totalOperateur] = await Promise.all([
+  const [disponibles, mesEnCours, totalZone] = await Promise.all([
     prisma.intervention.findMany({
       where: {
         AND: [
-          { statut: "NOUVELLE", client: { operateurId: technicien.operateurId } },
+          // La regle centrale : meme zone que le technicien.
+          { statut: "NOUVELLE", client: { zone: technicien.zone } },
           construireFiltreIntervention(parametres),
         ],
       },
-      // Les urgences d'abord, puis les plus anciennes.
-      orderBy: [{ priorite: "asc" }, { dateCreation: "asc" }],
+      // Les plus anciennes d'abord ; la priorite est remise dans l'ordre
+      // metier juste apres, en memoire (voir `rang`).
+      orderBy: { dateCreation: "asc" },
       select: selectionListe,
     }),
     prisma.intervention.count({
@@ -78,7 +79,7 @@ export default async function PannesDisponibles({
       },
     }),
     prisma.intervention.count({
-      where: { statut: "NOUVELLE", client: { operateurId: technicien.operateurId } },
+      where: { statut: "NOUVELLE", client: { zone: technicien.zone } },
     }),
   ]);
 
@@ -95,17 +96,17 @@ export default async function PannesDisponibles({
   return (
     <div className="mx-auto w-full max-w-5xl px-4 py-8 sm:px-6">
       <EntetePage
-        surtitre={`${technicien.operateur.nom} · ${technicien.matricule}`}
+        surtitre={`FibreConnect · ${technicien.matricule ?? "matricule à venir"}`}
         titre="Pannes disponibles"
-        description={`Vous êtes habilité sur le réseau ${technicien.operateur.nom} : seules les pannes de ses abonnés vous sont proposées. Celles des autres réseaux ne vous sont jamais montrées.`}
+        description={`Vous couvrez la zone ${technicien.zone} : seules les pannes des abonnés de cette zone vous sont proposées, quel que soit leur opérateur.`}
       />
 
       <div className="mb-6 grid grid-cols-2 gap-5 sm:grid-cols-4">
         <Indicateur
           libelle="À prendre"
-          valeur={totalOperateur}
-          accent="#22D3EE"
-          precision={`réseau ${technicien.operateur.nom}`}
+          valeur={totalZone}
+          accent={ACCENTS.signal}
+          precision={`zone ${technicien.zone}`}
         />
         <Indicateur
           libelle="Mes interventions"
@@ -117,7 +118,7 @@ export default async function PannesDisponibles({
         <Indicateur
           libelle="Statut"
           valeur={technicien.disponible ? "Disponible" : "Indisponible"}
-          accent={technicien.disponible ? "#16A34A" : "#DC2626"}
+          accent={technicien.disponible ? ACCENTS.succes : ACCENTS.danger}
         />
       </div>
 
@@ -140,7 +141,7 @@ export default async function PannesDisponibles({
             message={
               filtre
                 ? "Aucune panne disponible ne correspond à ces critères. Effacez les filtres pour voir toute la file."
-                : `Aucun abonné du réseau ${technicien.operateur.nom} n’a de panne en attente. Cette page se met à jour à chaque nouvelle déclaration.`
+                : `Aucun abonné de la zone ${technicien.zone} n’a de panne en attente. Cette page se met à jour à chaque nouvelle déclaration.`
             }
           />
         ) : (

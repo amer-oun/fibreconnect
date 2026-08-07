@@ -27,7 +27,7 @@ export default async function MesInterventions({
 
   const technicien = await prisma.technicien.findUnique({
     where: { utilisateurId: utilisateur.id },
-    select: { id: true, matricule: true, operateur: { select: { nom: true } } },
+    select: { id: true, matricule: true, zone: true },
   });
 
   if (!technicien) {
@@ -59,7 +59,7 @@ export default async function MesInterventions({
   return (
     <div className="mx-auto w-full max-w-5xl px-4 py-8 sm:px-6">
       <EntetePage
-        surtitre={`${technicien.operateur.nom} · ${technicien.matricule}`}
+        surtitre={`${technicien.matricule ?? "FibreConnect"} · zone ${technicien.zone}`}
         titre="Mes interventions"
         description="Les interventions que vous avez acceptées, en attente de démarrage ou en cours de traitement."
         actions={

@@ -4,9 +4,10 @@ import bcrypt from "bcryptjs";
 import { z } from "zod";
 
 import { prisma } from "@/lib/prisma";
-import { estRole } from "@/lib/constants";
+import { estRole, peutSeConnecter } from "@/lib/constants";
 import {
   ERREUR_COMPTE_DESACTIVE,
+  ERREUR_COMPTE_EN_ATTENTE,
   ERREUR_TROP_DE_TENTATIVES,
 } from "@/lib/connexion";
 import {
@@ -89,8 +90,13 @@ export const authOptions: NextAuthOptions = {
         // d'intrusion.
         oublierEchecs(email, adresseIp);
 
-        // Regle metier 6 : un compte desactive ne peut pas se connecter.
-        if (!utilisateur.actif) {
+        // Regle metier 6 : seul un compte ACTIF peut se connecter. Les deux
+        // autres etats sont refuses, mais avec des mots differents : « en
+        // attente » n'est pas un rejet, c'est une file.
+        if (utilisateur.statutCompte === "EN_ATTENTE") {
+          throw new Error(ERREUR_COMPTE_EN_ATTENTE);
+        }
+        if (!peutSeConnecter(utilisateur.statutCompte)) {
           throw new Error(ERREUR_COMPTE_DESACTIVE);
         }
 

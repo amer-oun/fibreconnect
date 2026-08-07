@@ -6,7 +6,6 @@ import { formaterDate } from "@/lib/dates";
 import { ACCENTS } from "@/lib/constants";
 import { EntetePage, Indicateur, Panneau, TitrePanneau } from "@/components/ui/surfaces";
 import VignetteTechnicien from "@/components/ui/vignette-technicien";
-import PastilleOperateur from "@/components/ui/pastille-operateur";
 import FormulaireMotDePasse from "@/components/compte/formulaire-mot-de-passe";
 import FormulaireProfil from "./formulaire-profil";
 
@@ -24,7 +23,6 @@ export default async function ProfilTechnicien() {
       zone: true,
       disponible: true,
       photoUrl: true,
-      operateur: { select: { nom: true, logoUrl: true } },
       utilisateur: {
         select: {
           nom: true,
@@ -62,9 +60,9 @@ export default async function ProfilTechnicien() {
   return (
     <div className="mx-auto w-full max-w-3xl px-4 py-8 sm:px-6">
       <EntetePage
-        surtitre={technicien.operateur.nom}
+        surtitre={`FibreConnect · zone ${technicien.zone}`}
         titre={`${technicien.utilisateur.prenom} ${technicien.utilisateur.nom}`}
-        description="Vos informations de terrain. Le matricule et le réseau sur lequel vous êtes habilité sont gérés par votre superviseur."
+        description="Vos informations de terrain. Le matricule et la zone que vous couvrez sont gérés par votre superviseur."
         vignette={
           <VignetteTechnicien
             photoUrl={technicien.photoUrl}
@@ -108,14 +106,12 @@ export default async function ProfilTechnicien() {
               </dd>
             </div>
             <div>
-              <dt className="eyebrow">Réseau habilité</dt>
-              <dd className="mt-1 flex items-center gap-2 text-sm text-nuit">
-                <PastilleOperateur
-                  nom={technicien.operateur.nom}
-                  logoUrl={technicien.operateur.logoUrl}
-                  taille="petit"
-                />
-                {technicien.operateur.nom}
+              <dt className="eyebrow">Zone couverte</dt>
+              <dd className="mt-1 text-sm text-nuit">
+                {technicien.zone}
+                <span className="mt-0.5 block text-xs text-ardoise">
+                  Décide des pannes qui vous sont proposées
+                </span>
               </dd>
             </div>
             <div>
@@ -133,7 +129,6 @@ export default async function ProfilTechnicien() {
             valeurs={{
               telephone: technicien.utilisateur.telephone,
               specialite: technicien.specialite,
-              zone: technicien.zone,
               disponible: technicien.disponible,
               photoUrl: technicien.photoUrl,
             }}

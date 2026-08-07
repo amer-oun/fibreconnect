@@ -12,12 +12,14 @@ import {
   Panneau,
   TitrePanneau,
 } from "@/components/ui/surfaces";
-import { BadgeStatut, Reference } from "@/components/ui/badges";
+import { BadgeCompte, BadgeStatut, Reference } from "@/components/ui/badges";
 import { LienBouton } from "@/components/ui/bouton";
 import { NoteEtoiles } from "@/components/ui/note-etoiles";
 import BoutonImpression from "@/components/ui/bouton-impression";
 import VignetteTechnicien from "@/components/ui/vignette-technicien";
 import BasculeCompte from "@/components/techniciens/bascule-compte";
+import FormulaireValidation from "@/components/techniciens/formulaire-validation";
+import FormulaireZone from "@/components/techniciens/formulaire-zone";
 
 export const metadata: Metadata = { title: "Fiche technicien" };
 
@@ -38,14 +40,13 @@ export default async function FicheTechnicien({
       zone: true,
       disponible: true,
       photoUrl: true,
-      operateur: { select: { nom: true } },
       utilisateur: {
         select: {
           nom: true,
           prenom: true,
           email: true,
           telephone: true,
-          actif: true,
+          statutCompte: true,
           creeLe: true,
         },
       },
@@ -86,6 +87,7 @@ export default async function FicheTechnicien({
 
   if (!technicien) notFound();
 
+  const enAttente = technicien.utilisateur.statutCompte === "EN_ATTENTE";
   const interventions = technicien.interventions;
   const terminees = interventions.filter((i) => i.statut === "TERMINEE");
   const enCours = interventions.filter((i) =>
@@ -117,20 +119,17 @@ export default async function FicheTechnicien({
   return (
     <div className="mx-auto w-full max-w-5xl px-4 py-8 sm:px-6">
       <EntetePage
-        surtitre={`${technicien.operateur.nom} · ${technicien.matricule}`}
+        surtitre={`FibreConnect · ${technicien.matricule ?? "matricule non attribué"}`}
         titre={`${technicien.utilisateur.prenom} ${technicien.utilisateur.nom}`}
         description={
           <span className="flex flex-wrap items-center gap-2">
-            {!technicien.utilisateur.actif && (
-              <span className="rounded-net border border-red-300 bg-red-50 px-2 py-0.5 text-xs font-medium text-red-700">
-                Compte désactivé
-              </span>
-            )}
-            {technicien.utilisateur.actif && !technicien.disponible && (
-              <span className="rounded-net border border-amber-300 bg-amber-50 px-2 py-0.5 text-xs font-medium text-amber-800">
-                Indisponible
-              </span>
-            )}
+            <BadgeCompte statutCompte={technicien.utilisateur.statutCompte} />
+            {technicien.utilisateur.statutCompte === "ACTIF" &&
+              !technicien.disponible && (
+                <span className="rounded-net border border-amber-300 bg-amber-50 px-2 py-0.5 text-xs font-medium text-amber-800">
+                  Indisponible
+                </span>
+              )}
             <span>
               {technicien.specialite} · zone {technicien.zone}
             </span>
@@ -264,12 +263,14 @@ export default async function FicheTechnicien({
               <div>
                 <dt className="eyebrow">Matricule</dt>
                 <dd className="mt-0.5 font-mono text-nuit">
-                  {technicien.matricule}
+                  {technicien.matricule ?? (
+                    <span className="text-brume italic">non attribué</span>
+                  )}
                 </dd>
               </div>
               <div>
-                <dt className="eyebrow">Opérateur</dt>
-                <dd className="mt-0.5 text-nuit">{technicien.operateur.nom}</dd>
+                <dt className="eyebrow">Spécialité</dt>
+                <dd className="mt-0.5 text-nuit">{technicien.specialite}</dd>
               </div>
               <div>
                 <dt className="eyebrow">Adresse e-mail</dt>
@@ -287,21 +288,42 @@ export default async function FicheTechnicien({
           </Panneau>
 
           <Panneau accent className="sans-impression">
-            <TitrePanneau>Accès à l’application</TitrePanneau>
-            <div className="p-5">
-              <p className="mb-4 text-sm text-ardoise">
-                {technicien.utilisateur.actif
-                  ? "Ce technicien peut se connecter et accepter des interventions."
-                  : "Ce compte est désactivé : la connexion est refusée."}
-              </p>
-              <BasculeCompte
+            <TitrePanneau>
+              {enAttente ? "Candidature à examiner" : "Accès à l’application"}
+            </TitrePanneau>
+
+            {enAttente ? (
+              <FormulaireValidation
                 technicienId={technicien.id}
-                actif={technicien.utilisateur.actif}
                 nom={`${technicien.utilisateur.prenom} ${technicien.utilisateur.nom}`}
-                interventionsOuvertes={enCours.length}
+                zoneProposee={technicien.zone}
               />
-            </div>
+            ) : (
+              <div className="p-5">
+                <p className="mb-4 text-sm text-ardoise">
+                  {technicien.utilisateur.statutCompte === "ACTIF"
+                    ? `Ce technicien peut se connecter et accepter les pannes de la zone ${technicien.zone}.`
+                    : "Ce compte est désactivé : la connexion est refusée."}
+                </p>
+                <BasculeCompte
+                  technicienId={technicien.id}
+                  statutCompte={technicien.utilisateur.statutCompte}
+                  nom={`${technicien.utilisateur.prenom} ${technicien.utilisateur.nom}`}
+                  interventionsOuvertes={enCours.length}
+                />
+              </div>
+            )}
           </Panneau>
+
+          {!enAttente && (
+            <Panneau className="sans-impression">
+              <TitrePanneau>Zone couverte</TitrePanneau>
+              <FormulaireZone
+                technicienId={technicien.id}
+                zone={technicien.zone}
+              />
+            </Panneau>
+          )}
         </aside>
       </div>
     </div>

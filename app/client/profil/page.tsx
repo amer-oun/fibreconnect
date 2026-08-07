@@ -17,6 +17,7 @@ export default async function ProfilClient() {
     select: {
       adresse: true,
       ville: true,
+      zone: true,
       numContrat: true,
       operateur: { select: { nom: true } },
       utilisateur: {
@@ -92,6 +93,7 @@ export default async function ProfilClient() {
               telephone: client.utilisateur.telephone,
               adresse: client.adresse,
               ville: client.ville,
+              zone: client.zone,
             }}
           />
         </Panneau>

@@ -50,6 +50,7 @@ export async function POST(requete: Request) {
       data: {
         adresse: donnees.adresse,
         ville: donnees.ville,
+        zone: donnees.zone,
         numContrat: donnees.numContrat,
         operateur: { connect: { id: operateur.id } },
         utilisateur: {

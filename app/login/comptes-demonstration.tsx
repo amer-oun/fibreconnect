@@ -16,18 +16,21 @@ const COMPTES = [
   {
     groupe: "Techniciens",
     lignes: [
-      { email: "karim.bouazizi@fibreconnect.tn", detail: "Tunisie Telecom · Tunis" },
-      { email: "sonia.trabelsi@fibreconnect.tn", detail: "Tunisie Telecom · Ariana" },
-      { email: "mehdi.gharbi@fibreconnect.tn", detail: "Ooredoo · Ben Arous" },
-      { email: "amine.jlassi@fibreconnect.tn", detail: "Orange · Sfax" },
+      { email: "karim.bouazizi@fibreconnect.tn", detail: "FC-001 · zone Tunis" },
+      { email: "yosr.hamdi@fibreconnect.tn", detail: "FC-005 · zone Tunis" },
+      { email: "sonia.trabelsi@fibreconnect.tn", detail: "FC-002 · zone Ariana" },
+      { email: "mehdi.gharbi@fibreconnect.tn", detail: "FC-003 · zone Ben Arous" },
+      { email: "amine.jlassi@fibreconnect.tn", detail: "FC-004 · zone Sfax" },
     ],
   },
   {
     groupe: "Clients",
     lignes: [
-      { email: "nadia.chaabane@example.tn", detail: "Tunisie Telecom · Tunis" },
-      { email: "slim.ferchichi@example.tn", detail: "Ooredoo · Ben Arous" },
-      { email: "hatem.zouari@example.tn", detail: "Orange · Sfax" },
+      { email: "nadia.chaabane@example.tn", detail: "zone Tunis" },
+      { email: "ines.khelifi@example.tn", detail: "La Marsa · zone Tunis" },
+      { email: "slim.ferchichi@example.tn", detail: "zone Ben Arous" },
+      { email: "rania.abdallah@example.tn", detail: "zone Sousse — non couverte" },
+      { email: "hatem.zouari@example.tn", detail: "zone Sfax" },
     ],
   },
 ];

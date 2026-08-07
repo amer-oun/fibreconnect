@@ -1,9 +1,10 @@
 // Schema Prisma du projet FibreConnect.
 //
 // CONTRAINTE SQLITE : SQLite ne supporte pas les `enum` Prisma.
-// Les champs `role`, `statut`, `priorite` et `typePanne` sont donc des `String`.
-// Les valeurs autorisees sont definies dans `lib/constants.ts` (`as const` + types
-// TypeScript derives) et validees avec zod a chaque ecriture.
+// Les champs `role`, `statutCompte`, `statut`, `priorite`, `typePanne` et `zone`
+// sont donc des `String`. Les valeurs autorisees sont definies dans
+// `lib/constants.ts` (`as const` + types TypeScript derives) et validees avec
+// zod a chaque ecriture.
 
 generator client {
   provider = "prisma-client-js"
@@ -23,8 +24,10 @@ model Utilisateur {
   nom        String
   prenom     String
   telephone  String
-  actif      Boolean  @default(true)
-  creeLe     DateTime @default(now())
+  // ACTIF | EN_ATTENTE | DESACTIVE. Seul ACTIF autorise la connexion.
+  // EN_ATTENTE : technicien inscrit par lui-meme, pas encore valide.
+  statutCompte String   @default("ACTIF")
+  creeLe       DateTime @default(now())
 
   // Profil metier : au plus un des deux selon le role.
   client     Client?
@@ -36,26 +39,27 @@ model Utilisateur {
   @@index([role])
 }
 
-/// Reseau d'un operateur fibre : Tunisie Telecom, Ooredoo, Orange.
-/// FibreConnect est un sous-traitant : ses techniciens sont ses employes,
-/// habilites chacun a intervenir sur le reseau d'un seul operateur.
+/// Operateur avec lequel un abonne a signe son contrat fibre.
+/// FibreConnect depanne les abonnes de ces reseaux, mais ses techniciens sont
+/// ses propres employes : aucun technicien n'est rattache a un operateur.
 model Operateur {
   id      String  @id @default(cuid())
   nom     String  @unique
   logoUrl String?
 
-  clients     Client[]
-  techniciens Technicien[]
+  clients Client[]
 }
 
-/// Profil d'un abonne. L'operateur est celui de son contrat : c'est lui
-/// qui determine quels techniciens verront ses pannes.
+/// Profil d'un abonne.
+/// `operateurId` : son fournisseur d'acces, pour l'information seulement.
+/// `zone` : ce qui determine quel technicien voit sa panne (voir Technicien).
 model Client {
   id            String @id @default(cuid())
   utilisateurId String @unique
   operateurId   String
   adresse       String
   ville         String
+  zone          String // voir ZONES dans lib/constants.ts
   numContrat    String @unique
   latitude      Float?
   longitude     Float?
@@ -65,26 +69,30 @@ model Client {
   interventions Intervention[]
 
   @@index([operateurId])
+  @@index([zone])
 }
 
-/// Profil d'un technicien FibreConnect. `operateurId` designe le reseau sur
-/// lequel il est habilite a intervenir, pas son employeur.
+/// Profil d'un technicien FibreConnect, employe de la societe.
+///
+/// REGLE CENTRALE : `zone` est le secteur geographique qu'il couvre. Un
+/// technicien ne voit dans son tableau de bord que les pannes NOUVELLE dont
+/// l'abonne est dans la meme zone que lui, quel que soit son operateur.
 model Technicien {
   id            String  @id @default(cuid())
   utilisateurId String  @unique
-  operateurId   String
-  matricule     String  @unique
+  // Attribue par le superviseur. Null tant que le compte n'est pas valide :
+  // un technicien qui s'inscrit lui-meme n'a pas encore de matricule.
+  matricule     String? @unique
   specialite    String
-  zone          String
+  zone          String // voir ZONES dans lib/constants.ts
   disponible    Boolean @default(true)
   photoUrl      String?
 
   utilisateur   Utilisateur    @relation(fields: [utilisateurId], references: [id], onDelete: Cascade)
-  operateur     Operateur      @relation(fields: [operateurId], references: [id])
   interventions Intervention[]
   historiques   Historique[]
 
-  @@index([operateurId])
+  @@index([zone])
 }
 
 /// Une panne declaree par un client, puis prise en charge par un technicien.

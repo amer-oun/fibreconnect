@@ -31,6 +31,74 @@ export const ROLE_ACCUEIL: Record<Role, string> = {
 };
 
 /* -------------------------------------------------------------------------- */
+/* Etat d'un compte                                                           */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * Account state, replacing the former `actif` boolean.
+ *
+ * A boolean could not tell "never validated yet" from "shut down by the
+ * supervisor" — two situations that call for different words on screen and,
+ * for the first one, a validation screen. Both refuse the sign-in all the same.
+ */
+export const STATUTS_COMPTE = ["ACTIF", "EN_ATTENTE", "DESACTIVE"] as const;
+export type StatutCompte = (typeof STATUTS_COMPTE)[number];
+
+export const STATUT_COMPTE_LABELS: Record<StatutCompte, string> = {
+  ACTIF: "Actif",
+  EN_ATTENTE: "En attente de validation",
+  DESACTIVE: "Désactivé",
+};
+
+/** Seul un compte ACTIF peut se connecter (regle metier 6). */
+export function peutSeConnecter(statutCompte: string) {
+  return statutCompte === "ACTIF";
+}
+
+export const STATUT_COMPTE_COULEURS: Record<StatutCompte, string> = {
+  ACTIF: "bg-green-50 text-green-800 border-green-300",
+  EN_ATTENTE: "bg-amber-50 text-amber-800 border-amber-300",
+  DESACTIVE: "bg-red-50 text-red-800 border-red-300",
+};
+
+/* -------------------------------------------------------------------------- */
+/* Zones d'intervention                                                       */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * Geographic zones — the heart of the dispatch rule.
+ *
+ * A technician is an employee of FibreConnect, not of a network operator, so
+ * what decides which faults reach them is *where they work*, not whose cable
+ * it is. `client.zone === technicien.zone` is the filter the whole technician
+ * dashboard rests on.
+ *
+ * Deliberately a closed list of governorates rather than the free-text `ville`.
+ * Comparing towns would leave a subscriber in "La Marsa" invisible to the
+ * technician covering "Tunis", and a single typo would hide a fault from
+ * everyone — silently, which is the worst way for a dispatch rule to fail.
+ */
+export const ZONES = [
+  "Tunis",
+  "Ariana",
+  "Ben Arous",
+  "Manouba",
+  "Nabeul",
+  "Bizerte",
+  "Sousse",
+  "Monastir",
+  "Sfax",
+] as const;
+export type Zone = (typeof ZONES)[number];
+
+export function estZone(valeur: string): valeur is Zone {
+  return (ZONES as readonly string[]).includes(valeur);
+}
+
+/** Options prêtes pour un `<select>`. Le libellé est le nom de la zone. */
+export const OPTIONS_ZONE = ZONES.map((z) => ({ valeur: z, libelle: z }));
+
+/* -------------------------------------------------------------------------- */
 /* Statuts d'intervention                                                     */
 /* -------------------------------------------------------------------------- */
 

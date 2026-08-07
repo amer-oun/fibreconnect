@@ -11,6 +11,7 @@ export type PointClient = {
   nom: string;
   adresse: string;
   ville: string;
+  zone: string;
   numContrat: string;
   operateur: string;
   latitude: number;
@@ -45,7 +46,6 @@ function pastille(couleur: string, alerte: boolean) {
 const COULEURS_OPERATEUR: Record<string, string> = {
   "Tunisie Telecom": "#0891B2",
   Ooredoo: "#B45309",
-  Orange: "#7C3AED",
 };
 
 export default function CarteInterne({ points }: { points: PointClient[] }) {
@@ -98,7 +98,7 @@ export default function CarteInterne({ points }: { points: PointClient[] }) {
                   color: "#64748B",
                 }}
               >
-                {point.numContrat} · {point.operateur}
+                {point.numContrat} · {point.operateur} · zone {point.zone}
               </span>
               <br />
               <span

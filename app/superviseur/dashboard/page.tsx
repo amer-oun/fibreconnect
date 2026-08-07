@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import Link from "next/link";
 
 import { exigerRole } from "@/lib/session";
 import { lireFenetre, statistiquesSuperviseur } from "@/lib/statistiques";
@@ -34,7 +35,7 @@ export default async function TableauDeBordSuperviseur({
     <div className="mx-auto w-full max-w-6xl px-4 py-8 sm:px-6">
       <EntetePage
         titre="Tableau de bord"
-        description="Vue d’ensemble des trois réseaux sur lesquels FibreConnect intervient : charge en cours, délais, qualité perçue."
+        description="Vue d’ensemble de l’activité de FibreConnect, couverture des zones comprise : charge en cours, délais, qualité perçue."
         actions={
           <>
             <BoutonImpression libelle="Imprimer le rapport" />
@@ -44,6 +45,44 @@ export default async function TableauDeBordSuperviseur({
           </>
         }
       />
+
+      {/* Ce qui demande une décision passe avant les chiffres. */}
+      {(stats.zonesDecouvertes.length > 0 || stats.techniciensAValider > 0) && (
+        <div
+          role="status"
+          className="mb-8 flex flex-col gap-2 rounded-bloc border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-900"
+        >
+          {stats.zonesDecouvertes.length > 0 && (
+            <p>
+              <span className="font-medium">
+                {stats.zonesDecouvertes.length === 1
+                  ? "Une zone n’a aucun technicien actif"
+                  : `${stats.zonesDecouvertes.length} zones n’ont aucun technicien actif`}
+              </span>{" "}
+              — {stats.zonesDecouvertes.map((z) => z.zone).join(", ")}. Les pannes
+              qui y sont déclarées ne sont proposées à personne.
+            </p>
+          )}
+          {stats.techniciensAValider > 0 && (
+            <p>
+              <span className="font-medium">
+                {stats.techniciensAValider} inscription
+                {stats.techniciensAValider > 1 ? "s" : ""} de technicien en
+                attente
+              </span>{" "}
+              — ces comptes ne peuvent pas se connecter avant votre validation.
+            </p>
+          )}
+          <p>
+            <Link
+              href="/superviseur/techniciens"
+              className="font-medium underline decoration-2 underline-offset-2"
+            >
+              Ouvrir la page Techniciens
+            </Link>
+          </p>
+        </div>
+      )}
 
       {/* Chiffres-clés */}
       <div className="mb-8 grid grid-cols-2 gap-6 lg:grid-cols-4">
@@ -93,7 +132,11 @@ export default async function TableauDeBordSuperviseur({
         <Indicateur
           libelle="Techniciens"
           valeur={`${stats.techniciensActifs}/${stats.nombreTechniciens}`}
-          precision="comptes actifs"
+          precision={
+            stats.techniciensAValider > 0
+              ? `${stats.techniciensAValider} en attente de validation`
+              : "comptes actifs"
+          }
         />
         <Indicateur
           libelle="Abonnés"
@@ -145,6 +188,66 @@ export default async function TableauDeBordSuperviseur({
           </div>
         </Panneau>
 
+        {/* Couverture des zones : la mesure qui dit si l'organisation tient. */}
+        <Panneau className="lg:col-span-2">
+          <TitrePanneau
+            actions={
+              <LienBouton
+                href="/superviseur/techniciens"
+                variante="discret"
+                taille="petit"
+              >
+                Gérer l’équipe
+              </LienBouton>
+            }
+          >
+            Couverture par zone
+          </TitrePanneau>
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-trait text-left">
+                  <th scope="col" className="px-4 py-2.5 font-display text-xs font-semibold tracking-wide text-ardoise uppercase sm:px-5">
+                    Zone
+                  </th>
+                  <th scope="col" className="px-4 py-2.5 text-right font-display text-xs font-semibold tracking-wide text-ardoise uppercase">
+                    Techniciens
+                  </th>
+                  <th scope="col" className="px-4 py-2.5 text-right font-display text-xs font-semibold tracking-wide text-ardoise uppercase">
+                    Ouvertes
+                  </th>
+                  <th scope="col" className="px-4 py-2.5 text-right font-display text-xs font-semibold tracking-wide text-ardoise uppercase sm:px-5">
+                    Interventions
+                  </th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-trait">
+                {stats.couvertureZones.map((z) => (
+                  <tr key={z.zone} className={z.couverte ? "" : "bg-amber-50/60"}>
+                    <th scope="row" className="px-4 py-3 text-left font-medium text-nuit sm:px-5">
+                      {z.zone}
+                      {!z.couverte && (
+                        <span className="ml-2 text-xs font-normal text-amber-800">
+                          aucun technicien
+                        </span>
+                      )}
+                    </th>
+                    <td className="px-4 py-3 text-right font-mono text-ardoise">
+                      {z.techniciens}
+                    </td>
+                    <td className="px-4 py-3 text-right font-mono text-ardoise">
+                      {z.ouvertes}
+                    </td>
+                    <td className="px-4 py-3 text-right font-mono text-nuit sm:px-5">
+                      {z.interventions}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </Panneau>
+
         {/* Table de repli : les mêmes chiffres, lisibles sans couleur. */}
         <Panneau className="lg:col-span-2">
           <TitrePanneau>Détail par opérateur</TitrePanneau>
@@ -157,9 +260,6 @@ export default async function TableauDeBordSuperviseur({
                   </th>
                   <th scope="col" className="px-4 py-2.5 text-right font-display text-xs font-semibold tracking-wide text-ardoise uppercase">
                     Abonnés
-                  </th>
-                  <th scope="col" className="px-4 py-2.5 text-right font-display text-xs font-semibold tracking-wide text-ardoise uppercase">
-                    Techniciens
                   </th>
                   <th scope="col" className="px-4 py-2.5 text-right font-display text-xs font-semibold tracking-wide text-ardoise uppercase sm:px-5">
                     Interventions
@@ -175,9 +275,6 @@ export default async function TableauDeBordSuperviseur({
                     <td className="px-4 py-3 text-right font-mono text-ardoise">
                       {operateur.clients}
                     </td>
-                    <td className="px-4 py-3 text-right font-mono text-ardoise">
-                      {operateur.techniciens}
-                    </td>
                     <td className="px-4 py-3 text-right font-mono text-nuit sm:px-5">
                       {operateur.interventions}
                     </td>
@@ -191,9 +288,6 @@ export default async function TableauDeBordSuperviseur({
                   </th>
                   <td className="px-4 py-3 text-right font-mono font-medium text-nuit">
                     {stats.nombreClients}
-                  </td>
-                  <td className="px-4 py-3 text-right font-mono font-medium text-nuit">
-                    {stats.nombreTechniciens}
                   </td>
                   <td className="px-4 py-3 text-right font-mono font-medium text-nuit sm:px-5">
                     {stats.total}

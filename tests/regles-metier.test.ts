@@ -183,32 +183,99 @@ describe("changerStatut() — la porte unique", () => {
   });
 });
 
-describe("Règle centrale : le filtre par réseau", () => {
-  it("ne propose au technicien que les pannes des abonnés de son réseau", async () => {
+describe("Règle centrale : le filtre par zone", () => {
+  it("ne propose au technicien que les pannes des abonnés de sa zone", async () => {
     await nouvelleIntervention(jeu.clientA.id);
     await nouvelleIntervention(jeu.clientB.id);
 
     const vuesParA = await prisma.intervention.findMany({
-      where: { statut: "NOUVELLE", client: { operateurId: jeu.techA.operateurId } },
+      where: { statut: "NOUVELLE", client: { zone: jeu.techA.zone } },
       include: { client: true },
     });
 
     expect(vuesParA.length).toBeGreaterThan(0);
-    expect(
-      vuesParA.every((i) => i.client.operateurId === jeu.techA.operateurId),
-    ).toBe(true);
+    expect(vuesParA.every((i) => i.client.zone === jeu.techA.zone)).toBe(true);
     expect(vuesParA.some((i) => i.clientId === jeu.clientB.id)).toBe(false);
   });
 
-  it("ne montre jamais la panne d'un abonné de l'autre réseau", async () => {
+  it("ne montre jamais la panne d'un abonné d'une autre zone", async () => {
     const chezB = await nouvelleIntervention(jeu.clientB.id);
 
     const vuesParA = await prisma.intervention.findMany({
-      where: { statut: "NOUVELLE", client: { operateurId: jeu.techA.operateurId } },
+      where: { statut: "NOUVELLE", client: { zone: jeu.techA.zone } },
       select: { id: true },
     });
 
     expect(vuesParA.map((i) => i.id)).not.toContain(chezB.id);
+  });
+
+  it("ignore l'opérateur : deux abonnés du même réseau, deux zones, deux files", async () => {
+    // Les deux abonnés du jeu de test partagent le même opérateur. Si le
+    // filtre retombait un jour sur `operateurId`, ce test échouerait.
+    const [a, b] = await Promise.all([
+      prisma.client.findUniqueOrThrow({ where: { id: jeu.clientA.id } }),
+      prisma.client.findUniqueOrThrow({ where: { id: jeu.clientB.id } }),
+    ]);
+    expect(a.operateurId).toBe(b.operateurId);
+    expect(a.zone).not.toBe(b.zone);
+
+    const chezB = await nouvelleIntervention(jeu.clientB.id);
+    const vuesParA = await prisma.intervention.findMany({
+      where: { statut: "NOUVELLE", client: { zone: jeu.techA.zone } },
+      select: { id: true },
+    });
+
+    expect(vuesParA.map((i) => i.id)).not.toContain(chezB.id);
+  });
+});
+
+describe("Acceptation concurrente", () => {
+  it("n'attribue l'intervention qu'à un seul technicien", async () => {
+    // Deux techniciens de la même zone voient la même panne et appuient sur
+    // « Accepter » en même temps. C'est la condition portée par `updateMany`
+    // qui départage : le second doit repartir les mains vides.
+    const i = await nouvelleIntervention(jeu.clientA.id);
+
+    const accepter = (technicienId: string) =>
+      prisma.intervention.updateMany({
+        where: { id: i.id, statut: "NOUVELLE", technicienId: null },
+        data: { statut: "ASSIGNEE", technicienId },
+      });
+
+    const [premier, second] = await Promise.all([
+      accepter(jeu.techA.id),
+      accepter(jeu.techB.id),
+    ]);
+
+    // Un seul `updateMany` a touché une ligne.
+    expect(premier.count + second.count).toBe(1);
+
+    const relu = await prisma.intervention.findUniqueOrThrow({
+      where: { id: i.id },
+    });
+    expect(relu.statut).toBe("ASSIGNEE");
+    expect(relu.technicienId).not.toBeNull();
+  });
+
+  it("refuse une seconde acceptation une fois la panne prise", async () => {
+    const i = await nouvelleIntervention(jeu.clientA.id);
+
+    await prisma.intervention.updateMany({
+      where: { id: i.id, statut: "NOUVELLE", technicienId: null },
+      data: { statut: "ASSIGNEE", technicienId: jeu.techA.id },
+    });
+
+    const seconde = await prisma.intervention.updateMany({
+      where: { id: i.id, statut: "NOUVELLE", technicienId: null },
+      data: { statut: "ASSIGNEE", technicienId: jeu.techB.id },
+    });
+
+    expect(seconde.count).toBe(0);
+
+    const relu = await prisma.intervention.findUniqueOrThrow({
+      where: { id: i.id },
+    });
+    expect(relu.technicienId).toBe(jeu.techA.id);
   });
 });
 

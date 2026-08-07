@@ -36,7 +36,8 @@ export type LigneHistorique = {
   dateAction: Date;
   commentaire: string | null;
   technicien: {
-    matricule: string;
+    /** Null tant que le superviseur ne l'a pas attribue. */
+    matricule: string | null;
     utilisateur: { nom: string; prenom: string };
   } | null;
 };
@@ -103,9 +104,11 @@ export default function TimelineIntervention({
                 <p className="mt-1 text-sm text-ardoise">
                   {ligne.technicien.utilisateur.prenom}{" "}
                   {ligne.technicien.utilisateur.nom}
-                  <span className="ml-2 font-mono text-xs">
-                    {ligne.technicien.matricule}
-                  </span>
+                  {ligne.technicien.matricule && (
+                    <span className="ml-2 font-mono text-xs">
+                      {ligne.technicien.matricule}
+                    </span>
+                  )}
                 </p>
               )}
             </div>

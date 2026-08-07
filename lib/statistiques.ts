@@ -1,5 +1,5 @@
 import { prisma } from "@/lib/prisma";
-import { STATUTS, TYPE_PANNE_LABELS, type Statut } from "@/lib/constants";
+import { STATUTS, TYPE_PANNE_LABELS, ZONES, type Statut } from "@/lib/constants";
 import { heuresEntre } from "@/lib/dates";
 
 /**
@@ -44,7 +44,7 @@ export async function statistiquesSuperviseur(fenetre: Fenetre = 6) {
         statut: true,
         noteClient: true,
         technicienId: true,
-        client: { select: { operateurId: true } },
+        client: { select: { operateurId: true, zone: true } },
         historiques: {
           where: { nouveauStatut: "ASSIGNEE" },
           orderBy: { dateAction: "asc" },
@@ -59,13 +59,12 @@ export async function statistiquesSuperviseur(fenetre: Fenetre = 6) {
         matricule: true,
         zone: true,
         disponible: true,
-        operateur: { select: { nom: true } },
-        utilisateur: { select: { nom: true, prenom: true, actif: true } },
+        utilisateur: { select: { nom: true, prenom: true, statutCompte: true } },
         interventions: { select: { statut: true, noteClient: true } },
       },
     }),
     prisma.operateur.findMany({
-      select: { id: true, nom: true, _count: { select: { clients: true, techniciens: true } } },
+      select: { id: true, nom: true, _count: { select: { clients: true } } },
     }),
     prisma.client.count(),
   ]);
@@ -135,9 +134,8 @@ export async function statistiquesSuperviseur(fenetre: Fenetre = 6) {
         id: t.id,
         nom: `${t.utilisateur.prenom} ${t.utilisateur.nom.charAt(0)}.`,
         matricule: t.matricule,
-        operateur: t.operateur.nom,
         zone: t.zone,
-        actif: t.utilisateur.actif,
+        statutCompte: t.utilisateur.statutCompte,
         disponible: t.disponible,
         ASSIGNEE: compte("ASSIGNEE"),
         EN_COURS: compte("EN_COURS"),
@@ -148,21 +146,56 @@ export async function statistiquesSuperviseur(fenetre: Fenetre = 6) {
     })
     .sort((a, b) => b.total - a.total);
 
-  /* Repartition par operateur : clients, techniciens, interventions. */
+  /* Repartition par operateur : abonnes et interventions. Plus de colonne
+     « techniciens » : ils appartiennent a la societe, pas aux reseaux. */
   const repartitionOperateurs = operateurs.map((o) => ({
     id: o.id,
     nom: o.nom,
     clients: o._count.clients,
-    techniciens: o._count.techniciens,
     interventions: interventions.filter((i) => i.client.operateurId === o.id)
       .length,
   }));
+
+  /**
+   * Couverture des zones : la seule mesure qui dise si l'organisation tient.
+   * Une zone qui a des abonnes mais aucun technicien actif est un trou —
+   * les pannes qui y tombent ne sont proposees a personne.
+   */
+  const zonesActives = new Set(
+    techniciens
+      .filter((t) => t.utilisateur.statutCompte === "ACTIF")
+      .map((t) => t.zone),
+  );
+
+  const couvertureZones = ZONES.map((zone) => {
+    const parZone = interventions.filter((i) => i.client.zone === zone);
+    return {
+      zone,
+      techniciens: techniciens.filter(
+        (t) => t.zone === zone && t.utilisateur.statutCompte === "ACTIF",
+      ).length,
+      interventions: parZone.length,
+      ouvertes: parZone.filter((i) =>
+        ["NOUVELLE", "ASSIGNEE", "EN_COURS"].includes(i.statut),
+      ).length,
+      couverte: zonesActives.has(zone),
+    };
+  }).filter((z) => z.interventions > 0 || z.techniciens > 0);
+
+  const zonesDecouvertes = couvertureZones.filter(
+    (z) => !z.couverte && z.interventions > 0,
+  );
 
   return {
     total,
     nombreClients,
     nombreTechniciens: techniciens.length,
-    techniciensActifs: techniciens.filter((t) => t.utilisateur.actif).length,
+    techniciensActifs: techniciens.filter(
+      (t) => t.utilisateur.statutCompte === "ACTIF",
+    ).length,
+    techniciensAValider: techniciens.filter(
+      (t) => t.utilisateur.statutCompte === "EN_ATTENTE",
+    ).length,
     enAttente: compteStatut.NOUVELLE ?? 0,
     enTraitement: (compteStatut.ASSIGNEE ?? 0) + (compteStatut.EN_COURS ?? 0),
     terminees,
@@ -187,5 +220,7 @@ export async function statistiquesSuperviseur(fenetre: Fenetre = 6) {
     serieMensuelle: mois,
     chargeTechniciens,
     repartitionOperateurs,
+    couvertureZones,
+    zonesDecouvertes,
   };
 }

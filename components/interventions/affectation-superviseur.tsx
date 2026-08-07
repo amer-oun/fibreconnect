@@ -9,29 +9,32 @@ import { MessageErreur } from "@/components/ui/champs";
 export type TechnicienAffectable = {
   id: string;
   nom: string;
-  matricule: string;
+  matricule: string | null;
   zone: string;
-  operateurId: string;
   disponible: boolean;
   chargeEnCours: number;
 };
 
 /**
- * Manual assignment by the supervisor.
+ * Affectation manuelle par le superviseur.
  *
- * The dropdown only lists technicians of the subscriber's own operator — the
- * API enforces the same rule, so narrowing the list here is a convenience,
- * not the control.
+ * Les techniciens de la zone de l'abonné sont proposés en premier, les autres
+ * sous une rubrique « hors zone » — jamais masqués. C'est justement le geste
+ * qui débloque une zone sans personne, et l'interdire à l'écran obligerait à
+ * créer un compte fictif pour dépanner une ville.
+ *
+ * L'API applique la même règle : elle accepte l'écart, mais l'inscrit dans
+ * l'historique de l'intervention.
  */
 export default function AffectationSuperviseur({
   interventionId,
-  operateurId,
+  zone,
   technicienActuelId,
   techniciens,
   statut,
 }: {
   interventionId: string;
-  operateurId: string;
+  zone: string;
   technicienActuelId: string | null;
   techniciens: TechnicienAffectable[];
   statut: string;
@@ -40,10 +43,6 @@ export default function AffectationSuperviseur({
   const [choix, setChoix] = useState("");
   const [erreur, setErreur] = useState<string | null>(null);
   const [enCours, setEnCours] = useState(false);
-
-  const eligibles = techniciens.filter(
-    (t) => t.operateurId === operateurId && t.id !== technicienActuelId,
-  );
 
   const terminal = statut === "TERMINEE" || statut === "ANNULEE";
 
@@ -54,6 +53,10 @@ export default function AffectationSuperviseur({
       </p>
     );
   }
+
+  const eligibles = techniciens.filter((t) => t.id !== technicienActuelId);
+  const dansLaZone = eligibles.filter((t) => t.zone === zone);
+  const horsZone = eligibles.filter((t) => t.zone !== zone);
 
   async function affecter() {
     if (!choix) return;
@@ -84,10 +87,13 @@ export default function AffectationSuperviseur({
   if (eligibles.length === 0) {
     return (
       <p className="text-xs text-brume italic">
-        Aucun autre technicien habilité sur ce réseau.
+        Aucun autre technicien actif dans l’équipe.
       </p>
     );
   }
+
+  const libelle = (t: TechnicienAffectable) =>
+    `${t.nom} · ${t.chargeEnCours} en cours${t.disponible ? "" : " (indisponible)"}`;
 
   return (
     <div className="flex flex-col items-start gap-2 md:items-end">
@@ -104,22 +110,38 @@ export default function AffectationSuperviseur({
           <option value="">
             {technicienActuelId ? "Réaffecter à…" : "Affecter à…"}
           </option>
-          {eligibles.map((t) => (
-            <option key={t.id} value={t.id}>
-              {t.nom} · {t.zone} · {t.chargeEnCours} en cours
-              {t.disponible ? "" : " (indisponible)"}
-            </option>
-          ))}
+
+          {dansLaZone.length > 0 && (
+            <optgroup label={`Zone ${zone}`}>
+              {dansLaZone.map((t) => (
+                <option key={t.id} value={t.id}>
+                  {libelle(t)}
+                </option>
+              ))}
+            </optgroup>
+          )}
+
+          {horsZone.length > 0 && (
+            <optgroup label="Hors zone — déplacement à prévoir">
+              {horsZone.map((t) => (
+                <option key={t.id} value={t.id}>
+                  {libelle(t)} · {t.zone}
+                </option>
+              ))}
+            </optgroup>
+          )}
         </select>
 
-        <Bouton
-          taille="petit"
-          disabled={!choix || enCours}
-          onClick={affecter}
-        >
+        <Bouton taille="petit" disabled={!choix || enCours} onClick={affecter}>
           {enCours ? "…" : technicienActuelId ? "Réaffecter" : "Affecter"}
         </Bouton>
       </div>
+
+      {dansLaZone.length === 0 && (
+        <p className="max-w-64 text-xs text-amber-700 md:text-right">
+          Aucun technicien ne couvre la zone {zone}.
+        </p>
+      )}
 
       {erreur && <MessageErreur>{erreur}</MessageErreur>}
     </div>

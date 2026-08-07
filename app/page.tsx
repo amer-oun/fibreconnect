@@ -27,8 +27,8 @@ const PORTES = [
     role: "Technicien",
     titre: "Espace technicien",
     phrase:
-      "Consultez les pannes du réseau sur lequel vous êtes habilité, acceptez celles de votre zone et rédigez votre rapport depuis le terrain.",
-    reperes: ["Filtré par réseau", "Utilisable sur mobile", "Rapport d’intervention"],
+      "Consultez les pannes de la zone que vous couvrez, acceptez celles que vous pouvez traiter et rédigez votre rapport depuis le terrain.",
+    reperes: ["Filtré par zone", "Utilisable sur mobile", "Rapport d’intervention"],
   },
   {
     role: "Superviseur",
@@ -64,7 +64,7 @@ export default async function PageAccueil() {
           un point précis sur la ligne.
         </h1>
         <p className="mt-5 max-w-xl text-lg leading-relaxed text-brume">
-          FibreConnect intervient pour le compte des trois opérateurs et relie
+          FibreConnect dépanne les abonnés de ses opérateurs partenaires et relie
           l’abonné qui déclare, le technicien qui se déplace et le superviseur
           qui arbitre — sur une seule chaîne, du signalement au rétablissement.
         </p>
@@ -162,7 +162,7 @@ export default async function PageAccueil() {
             FibreConnect — sous-traitant de maintenance fibre optique.
           </p>
           <p className="font-mono">
-            Habilité sur : Tunisie Telecom · Ooredoo · Orange
+            Habilité sur : Tunisie Telecom · Ooredoo
           </p>
         </div>
       </footer>

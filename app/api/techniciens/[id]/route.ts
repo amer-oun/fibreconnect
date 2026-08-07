@@ -1,6 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import { ErreurMetier } from "@/lib/interventions";
-import { statutCompteSchema } from "@/lib/validations";
+import { statutCompteSchema, zoneTechnicienSchema } from "@/lib/validations";
 import {
   exigerRoleApi,
   lireCorps,
@@ -9,8 +9,14 @@ import {
 } from "@/lib/api";
 
 /**
- * Activation / désactivation d'un compte technicien par le superviseur.
- * Un utilisateur `actif = false` ne peut plus se connecter (règle 6).
+ * Le superviseur agit sur un compte technicien.
+ *
+ * Deux gestes distincts, deux formes de corps :
+ *   - `{ statutCompte }` : valider une inscription, désactiver, réactiver ;
+ *   - `{ zone }` : changer le secteur couvert.
+ *
+ * La zone n'est pas dans le profil que le technicien modifie lui-même : elle
+ * décide quelles pannes il voit, c'est donc une décision d'affectation.
  */
 export async function PATCH(
   requete: Request,
@@ -19,14 +25,37 @@ export async function PATCH(
   try {
     await exigerRoleApi("SUPERVISEUR");
     const { id } = await params;
-    const { actif } = statutCompteSchema.parse(await lireCorps(requete));
+    const corps = await lireCorps(requete);
 
     const technicien = await prisma.technicien.findUnique({
       where: { id },
-      select: { id: true, utilisateurId: true },
+      select: {
+        id: true,
+        utilisateurId: true,
+        matricule: true,
+        utilisateur: { select: { statutCompte: true } },
+      },
     });
     if (!technicien) {
       throw new ErreurMetier("Ce technicien n’existe pas.", 404);
+    }
+
+    /* Changement de zone ---------------------------------------------------- */
+    if (corps && typeof corps === "object" && "zone" in corps) {
+      const { zone } = zoneTechnicienSchema.parse(corps);
+      await prisma.technicien.update({ where: { id }, data: { zone } });
+      return reponseOk({ id, zone });
+    }
+
+    /* Changement d'état du compte ------------------------------------------- */
+    const { statutCompte } = statutCompteSchema.parse(corps);
+
+    // Activer un technicien qui n'a pas de matricule reviendrait à le laisser
+    // travailler sans identifiant sur ses rapports. On l'exige d'abord.
+    if (statutCompte === "ACTIF" && !technicien.matricule) {
+      throw new ErreurMetier(
+        "Attribuez un matricule à ce technicien avant d’activer son compte.",
+      );
     }
 
     // Le superviseur peut désactiver n'importe quel compte : c'est une
@@ -39,10 +68,10 @@ export async function PATCH(
 
     await prisma.utilisateur.update({
       where: { id: technicien.utilisateurId },
-      data: { actif },
+      data: { statutCompte },
     });
 
-    return reponseOk({ id, actif, interventionsOuvertes: enCours });
+    return reponseOk({ id, statutCompte, interventionsOuvertes: enCours });
   } catch (erreur) {
     return traiterErreur(erreur);
   }

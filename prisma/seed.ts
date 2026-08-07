@@ -16,6 +16,7 @@ import {
   type Priorite,
   type Statut,
   type TypePanne,
+  type Zone,
 } from "../lib/constants";
 
 const prisma = new PrismaClient();
@@ -52,12 +53,13 @@ async function main() {
   /* Opérateurs                                                             */
   /* ---------------------------------------------------------------------- */
 
+  // FibreConnect depanne les abonnes de ces deux reseaux. Ses techniciens ne
+  // sont rattaches a aucun des deux : ce sont ses propres employes.
   console.log("Création des opérateurs...");
   const tunisieTelecom = await prisma.operateur.create({
     data: { nom: "Tunisie Telecom" },
   });
   const ooredoo = await prisma.operateur.create({ data: { nom: "Ooredoo" } });
-  const orange = await prisma.operateur.create({ data: { nom: "Orange" } });
 
   /* ---------------------------------------------------------------------- */
   /* Superviseur                                                            */
@@ -79,6 +81,7 @@ async function main() {
   /* Techniciens                                                            */
   /* ---------------------------------------------------------------------- */
 
+  // Le matricule suit l'employe, plus le reseau : FC-001, FC-002...
   console.log("Création des techniciens...");
 
   function creerTechnicien(donnees: {
@@ -86,18 +89,14 @@ async function main() {
     nom: string;
     prenom: string;
     telephone: string;
-    operateurId: string;
     matricule: string;
     specialite: string;
-    zone: string;
+    zone: Zone;
   }) {
-    const { email, nom, prenom, telephone, operateurId, ...profil } = donnees;
+    const { email, nom, prenom, telephone, ...profil } = donnees;
     return prisma.technicien.create({
       data: {
         ...profil,
-        // `connect` et non `operateurId` : Prisma refuse de mêler une clé
-        // étrangère brute et un `create` imbriqué dans le même objet.
-        operateur: { connect: { id: operateurId } },
         utilisateur: {
           create: {
             email,
@@ -118,8 +117,7 @@ async function main() {
     nom: "Bouazizi",
     prenom: "Karim",
     telephone: "+216 98 111 222",
-    operateurId: tunisieTelecom.id,
-    matricule: "TT-001",
+    matricule: "FC-001",
     specialite: "Raccordement FTTH",
     zone: "Tunis",
   });
@@ -129,8 +127,7 @@ async function main() {
     nom: "Trabelsi",
     prenom: "Sonia",
     telephone: "+216 98 333 444",
-    operateurId: tunisieTelecom.id,
-    matricule: "TT-002",
+    matricule: "FC-002",
     specialite: "Soudure et mesure optique",
     zone: "Ariana",
   });
@@ -140,8 +137,7 @@ async function main() {
     nom: "Gharbi",
     prenom: "Mehdi",
     telephone: "+216 55 555 666",
-    operateurId: ooredoo.id,
-    matricule: "OO-101",
+    matricule: "FC-003",
     specialite: "Équipements ONT et routeurs",
     zone: "Ben Arous",
   });
@@ -151,10 +147,22 @@ async function main() {
     nom: "Jlassi",
     prenom: "Amine",
     telephone: "+216 22 777 888",
-    operateurId: orange.id,
-    matricule: "OR-201",
+    matricule: "FC-004",
     specialite: "Diagnostic réseau",
     zone: "Sfax",
+  });
+
+  // Deuxieme technicien sur Tunis : sans lui, la zone la plus chargee du jeu
+  // de donnees n'aurait qu'un seul intervenant, et la reaffectation par le
+  // superviseur n'aurait personne vers qui aller.
+  const yosr = await creerTechnicien({
+    email: "yosr.hamdi@fibreconnect.tn",
+    nom: "Hamdi",
+    prenom: "Yosr",
+    telephone: "+216 24 999 000",
+    matricule: "FC-005",
+    specialite: "Raccordement FTTH et mesures",
+    zone: "Tunis",
   });
 
   /* ---------------------------------------------------------------------- */
@@ -171,6 +179,8 @@ async function main() {
     operateurId: string;
     adresse: string;
     ville: string;
+    /** Gouvernorat : c'est lui qui decide quel technicien voit la panne. */
+    zone: Zone;
     numContrat: string;
     latitude: number;
     longitude: number;
@@ -196,6 +206,10 @@ async function main() {
   }
 
   // Coordonnées réelles des villes concernées.
+  //
+  // Noter que `ville` et `zone` ne coincident pas toujours : Inès habite
+  // La Marsa, qui releve du gouvernorat de Tunis. C'est precisement pour ce
+  // genre de cas que le filtre porte sur la zone et non sur la ville.
   const nadia = await creerClient({
     email: "nadia.chaabane@example.tn",
     nom: "Chaabane",
@@ -204,6 +218,7 @@ async function main() {
     operateurId: tunisieTelecom.id,
     adresse: "12 avenue Habib Bourguiba",
     ville: "Tunis",
+    zone: "Tunis",
     numContrat: "TT-2024-0001",
     latitude: 36.8065,
     longitude: 10.1815,
@@ -217,6 +232,7 @@ async function main() {
     operateurId: tunisieTelecom.id,
     adresse: "45 rue de l'Indépendance",
     ville: "Ariana",
+    zone: "Ariana",
     numContrat: "TT-2024-0002",
     latitude: 36.8625,
     longitude: 10.1956,
@@ -230,6 +246,7 @@ async function main() {
     operateurId: tunisieTelecom.id,
     adresse: "8 rue du Golfe",
     ville: "La Marsa",
+    zone: "Tunis",
     numContrat: "TT-2024-0003",
     latitude: 36.8783,
     longitude: 10.3247,
@@ -243,11 +260,14 @@ async function main() {
     operateurId: ooredoo.id,
     adresse: "23 rue des Oliviers",
     ville: "Ben Arous",
+    zone: "Ben Arous",
     numContrat: "OO-2024-0004",
     latitude: 36.7533,
     longitude: 10.2278,
   });
 
+  // Sousse n'a volontairement aucun technicien : le superviseur doit voir
+  // qu'une zone est decouverte, et pouvoir y affecter quelqu'un a la main.
   const rania = await creerClient({
     email: "rania.abdallah@example.tn",
     nom: "Abdallah",
@@ -256,20 +276,24 @@ async function main() {
     operateurId: ooredoo.id,
     adresse: "5 avenue Léopold Senghor",
     ville: "Sousse",
+    zone: "Sousse",
     numContrat: "OO-2024-0005",
     latitude: 35.8256,
     longitude: 10.6084,
   });
 
+  // Anciennement abonne Orange : la societe ne travaille plus avec ce reseau,
+  // son contrat a ete repris par Ooredoo.
   const hatem = await creerClient({
     email: "hatem.zouari@example.tn",
     nom: "Zouari",
     prenom: "Hatem",
     telephone: "+216 20 606 606",
-    operateurId: orange.id,
+    operateurId: ooredoo.id,
     adresse: "17 route de Gabès",
     ville: "Sfax",
-    numContrat: "OR-2024-0006",
+    zone: "Sfax",
+    numContrat: "OO-2024-0006",
     latitude: 34.7406,
     longitude: 10.7603,
   });
@@ -354,7 +378,9 @@ async function main() {
     return intervention;
   }
 
-  // --- 3 interventions NOUVELLE (visibles par les techniciens du même opérateur)
+  // --- 4 interventions NOUVELLE, dans quatre zones differentes.
+  // Le filtre par zone se demontre en comparant les tableaux de bord : Karim
+  // (Tunis) voit celle de Nadia, jamais celle de Slim (Ben Arous).
   await creerIntervention({
     clientId: nadia.id,
     typePanne: "COUPURE_TOTALE",
@@ -365,8 +391,6 @@ async function main() {
     etapes: [],
   });
 
-  // Une NOUVELLE par opérateur : chaque technicien a de quoi travailler, et le
-  // filtre par opérateur se démontre en comparant les trois tableaux de bord.
   await creerIntervention({
     clientId: hatem.id,
     typePanne: "DEBIT_FAIBLE",
@@ -384,6 +408,19 @@ async function main() {
     description:
       "L'ONT redémarre tout seul plusieurs fois par heure et chauffe anormalement.",
     creeeIlYaHeures: 20,
+    etapes: [],
+  });
+
+  // Zone de Sousse : aucun technicien ne la couvre, donc personne ne voit
+  // cette panne. C'est exactement ce que le tableau de bord du superviseur
+  // doit signaler — une zone decouverte n'est pas une zone vide.
+  await creerIntervention({
+    clientId: rania.id,
+    typePanne: "CABLE_ENDOMMAGE",
+    priorite: "HAUTE",
+    description:
+      "Le câble de branchement pend le long de la façade depuis la tempête de cette nuit.",
+    creeeIlYaHeures: 14,
     etapes: [],
   });
 
@@ -427,9 +464,11 @@ async function main() {
   });
 
   // --- 2 interventions EN_COURS
+  // Nadia est a Tunis : c'est Yosr, l'autre technicien de la zone, qui a pris
+  // celle-ci pendant que Karim traitait le cable d'Ines.
   await creerIntervention({
     clientId: nadia.id,
-    technicienId: sonia.id,
+    technicienId: yosr.id,
     typePanne: "CHANGEMENT_ROUTEUR",
     priorite: "NORMALE",
     description:
@@ -453,9 +492,14 @@ async function main() {
     ],
   });
 
+  // Rania est a Sousse, zone que personne ne couvre : aucun technicien n'aurait
+  // pu voir cette panne, donc aucun n'aurait pu l'accepter. C'est le
+  // superviseur qui l'a confiee a Mehdi, hors de sa zone habituelle. Cas
+  // volontaire : il montre a quoi sert l'affectation manuelle.
   await creerIntervention({
     clientId: rania.id,
     technicienId: mehdi.id,
+    superviseurId: superviseur.id,
     typePanne: "DEBIT_FAIBLE",
     priorite: "HAUTE",
     description:
@@ -463,11 +507,11 @@ async function main() {
     creeeIlYaHeures: 72,
     etapes: [
       {
-        action: "ACCEPTATION",
+        action: "ASSIGNATION_SUPERVISEUR",
         vers: "ASSIGNEE",
         ilYaHeures: 70,
-        parLeTechnicien: true,
-        commentaire: "Intervention acceptée par le technicien",
+        commentaire:
+          "Affectée par le superviseur à Mehdi Gharbi (FC-003) — hors de sa zone, aucun technicien ne couvre Sousse",
       },
       {
         action: "DEMARRAGE",
@@ -480,9 +524,10 @@ async function main() {
   });
 
   // --- 2 interventions TERMINEE (une notée, une pas encore)
+  // Youssef est a Ariana : c'est Sonia, technicienne de cette zone.
   await creerIntervention({
     clientId: youssef.id,
-    technicienId: karim.id,
+    technicienId: sonia.id,
     typePanne: "COUPURE_TOTALE",
     priorite: "URGENTE",
     description: "Coupure totale sur toute la ligne, aucun signal reçu.",
@@ -590,11 +635,14 @@ async function main() {
   };
   const parmi = <T,>(liste: readonly T[]) => liste[Math.floor(alea() * liste.length)];
 
-  // Chaque client ne peut être traité que par un technicien de son opérateur.
+  // Un abonné n'est traité que par un technicien de sa zone. Rania (Sousse)
+  // n'apparaît pas ici : sa zone n'a aucun technicien, donc aucune de ses
+  // pannes n'a jamais pu être prise en charge spontanément.
   const equipes = [
-    { clients: [nadia, youssef, ines], techniciens: [karim, sonia] },
-    { clients: [slim, rania], techniciens: [mehdi] },
-    { clients: [hatem], techniciens: [amine] },
+    { clients: [nadia, ines], techniciens: [karim, yosr] }, // Tunis
+    { clients: [youssef], techniciens: [sonia] }, // Ariana
+    { clients: [slim], techniciens: [mehdi] }, // Ben Arous
+    { clients: [hatem], techniciens: [amine] }, // Sfax
   ];
 
   const CATALOGUE: Record<
@@ -777,15 +825,15 @@ async function main() {
 
   const comptes = [
     { role: "SUPERVISEUR", email: superviseur.email, detail: "Leila Ben Salah" },
-    ...[karim, sonia, mehdi, amine].map((t) => ({
+    ...[karim, sonia, mehdi, amine, yosr].map((t) => ({
       role: "TECHNICIEN",
       email: t.utilisateur.email,
-      detail: `${t.matricule} · ${t.zone}`,
+      detail: `${t.matricule} · zone ${t.zone}`,
     })),
     ...[nadia, youssef, ines, slim, rania, hatem].map((c) => ({
       role: "CLIENT",
       email: c.utilisateur.email,
-      detail: `${c.numContrat} · ${c.ville}`,
+      detail: `${c.numContrat} · ${c.ville} (zone ${c.zone})`,
     })),
   ];
 

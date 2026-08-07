@@ -24,14 +24,10 @@ export async function POST(requete: Request) {
     const donnees = nouveauTechnicienSchema.parse(await lireCorps(requete));
     const email = donnees.email.toLowerCase();
 
-    const [emailPris, matriculePris, operateur] = await Promise.all([
+    const [emailPris, matriculePris] = await Promise.all([
       prisma.utilisateur.findUnique({ where: { email }, select: { id: true } }),
       prisma.technicien.findUnique({
         where: { matricule: donnees.matricule },
-        select: { id: true },
-      }),
-      prisma.operateur.findUnique({
-        where: { id: donnees.operateurId },
         select: { id: true },
       }),
     ]);
@@ -45,21 +41,20 @@ export async function POST(requete: Request) {
     if (matriculePris) {
       throw new ErreurMetier("Ce matricule est déjà attribué.", 409);
     }
-    if (!operateur) {
-      throw new ErreurMetier("Choisissez un réseau valide.");
-    }
 
+    // Cree par le superviseur : le compte est actif immediatement, il n'a
+    // personne d'autre a attendre.
     const technicien = await prisma.technicien.create({
       data: {
         matricule: donnees.matricule,
         specialite: donnees.specialite,
         zone: donnees.zone,
-        operateur: { connect: { id: operateur.id } },
         utilisateur: {
           create: {
             email,
             motDePasse: await bcrypt.hash(donnees.motDePasse, BCRYPT_ROUNDS),
             role: "TECHNICIEN",
+            statutCompte: "ACTIF",
             nom: donnees.nom,
             prenom: donnees.prenom,
             telephone: donnees.telephone,

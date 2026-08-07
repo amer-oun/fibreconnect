@@ -32,16 +32,16 @@ export async function POST(
           id: true,
           statut: true,
           technicienId: true,
-          client: { select: { operateurId: true } },
+          client: { select: { zone: true } },
         },
       }),
       prisma.technicien.findUnique({
         where: { id: technicienId },
         select: {
           id: true,
-          operateurId: true,
+          zone: true,
           matricule: true,
-          utilisateur: { select: { nom: true, prenom: true, actif: true } },
+          utilisateur: { select: { nom: true, prenom: true, statutCompte: true } },
         },
       }),
     ]);
@@ -60,14 +60,11 @@ export async function POST(
         "Une intervention terminée ou annulée ne peut plus être réaffectée.",
       );
     }
-    if (!technicien.utilisateur.actif) {
+    if (technicien.utilisateur.statutCompte !== "ACTIF") {
       throw new ErreurMetier(
-        "Ce compte technicien est désactivé : réactivez-le avant de lui affecter une intervention.",
-      );
-    }
-    if (technicien.operateurId !== intervention.client.operateurId) {
-      throw new ErreurMetier(
-        "Ce technicien n’est pas habilité sur le réseau de cet abonné.",
+        technicien.utilisateur.statutCompte === "EN_ATTENTE"
+          ? "Ce compte technicien n’est pas encore validé : validez-le avant de lui affecter une intervention."
+          : "Ce compte technicien est désactivé : réactivez-le avant de lui affecter une intervention.",
       );
     }
     if (intervention.technicienId === technicien.id) {
@@ -76,7 +73,18 @@ export async function POST(
       );
     }
 
-    const nomComplet = `${technicien.utilisateur.prenom} ${technicien.utilisateur.nom} (${technicien.matricule})`;
+    // La zone n'est PAS une interdiction ici, a la difference de l'acceptation.
+    // Le superviseur est justement l'echappatoire quand une zone n'a personne :
+    // il peut envoyer un technicien hors de son secteur, et l'historique le
+    // dit explicitement pour que ce ne soit jamais une decision invisible.
+    const horsZone = technicien.zone !== intervention.client.zone;
+
+    const nomComplet = `${technicien.utilisateur.prenom} ${technicien.utilisateur.nom}${
+      technicien.matricule ? ` (${technicien.matricule})` : ""
+    }`;
+    const mention = horsZone
+      ? ` — hors zone : ${technicien.zone} vers ${intervention.client.zone}`
+      : "";
 
     if (intervention.statut === "NOUVELLE") {
       await changerStatut({
@@ -84,7 +92,7 @@ export async function POST(
         vers: "ASSIGNEE",
         action: "ASSIGNATION_SUPERVISEUR",
         technicienId: technicien.id,
-        commentaire: `Assignée par le superviseur à ${nomComplet}`,
+        commentaire: `Assignée par le superviseur à ${nomComplet}${mention}`,
         champs: {
           technicien: { connect: { id: technicien.id } },
           superviseur: { connect: { id: superviseur.id } },
@@ -110,7 +118,7 @@ export async function POST(
           action: "REASSIGNATION",
           ancienStatut: intervention.statut,
           nouveauStatut: intervention.statut,
-          commentaire: `Réaffectée par le superviseur à ${nomComplet}`,
+          commentaire: `Réaffectée par le superviseur à ${nomComplet}${mention}`,
         },
       });
     });

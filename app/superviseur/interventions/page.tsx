@@ -7,6 +7,7 @@ import {
   OPTIONS_PRIORITE,
   OPTIONS_STATUT,
   OPTIONS_TYPE_PANNE,
+  OPTIONS_ZONE_FILTRE,
   construireFiltreIntervention,
   type ParametresRecherche,
 } from "@/lib/filtres";
@@ -64,12 +65,11 @@ export default async function InterventionsSuperviseur({
         },
       }),
       prisma.technicien.findMany({
-        where: { utilisateur: { actif: true } },
+        where: { utilisateur: { statutCompte: "ACTIF" } },
         select: {
           id: true,
           matricule: true,
           zone: true,
-          operateurId: true,
           disponible: true,
           utilisateur: { select: { nom: true, prenom: true } },
           _count: {
@@ -93,7 +93,6 @@ export default async function InterventionsSuperviseur({
     nom: `${t.utilisateur.prenom} ${t.utilisateur.nom}`,
     matricule: t.matricule,
     zone: t.zone,
-    operateurId: t.operateurId,
     disponible: t.disponible,
     chargeEnCours: t._count.interventions,
   }));
@@ -102,7 +101,7 @@ export default async function InterventionsSuperviseur({
     <div className="mx-auto w-full max-w-6xl px-4 py-8 sm:px-6">
       <EntetePage
         titre="Interventions"
-        description="Toutes les interventions des trois opérateurs. Vous pouvez affecter ou réaffecter n’importe laquelle à n’importe quel technicien du même opérateur."
+        description="Toutes les interventions, toutes zones confondues. Vous pouvez affecter ou réaffecter n’importe laquelle à n’importe quel technicien — y compris hors de sa zone, ce que l’historique consigne."
         actions={
           <>
             {/* L'export reprend les filtres affichés : ce qu'on voit est ce
@@ -153,6 +152,7 @@ export default async function InterventionsSuperviseur({
           placeholderRecherche="Rechercher par abonné, ville, contrat, matricule…"
           filtres={[
             { cle: "statut", label: "Statut", options: OPTIONS_STATUT },
+            { cle: "zone", label: "Zone", options: OPTIONS_ZONE_FILTRE },
             {
               cle: "operateur",
               label: "Opérateur",
@@ -184,7 +184,7 @@ export default async function InterventionsSuperviseur({
                   <div className="flex flex-col items-start gap-2 md:items-end">
                     <AffectationSuperviseur
                       interventionId={intervention.id}
-                      operateurId={intervention.client.operateurId}
+                      zone={intervention.client.zone}
                       technicienActuelId={intervention.technicienId}
                       techniciens={techniciens}
                       statut={intervention.statut}

@@ -7,6 +7,7 @@ import {
   STATUT_LABELS,
   TYPES_PANNE,
   TYPE_PANNE_LABELS,
+  ZONES,
 } from "@/lib/constants";
 
 /**
@@ -48,6 +49,11 @@ export function construireFiltreIntervention(
     conditions.push({ client: { operateurId: operateur } });
   }
 
+  const zone = valeur(parametres, "zone");
+  if ((ZONES as readonly string[]).includes(zone)) {
+    conditions.push({ client: { zone } });
+  }
+
   const q = valeur(parametres, "q");
   if (q) {
     // SQLite ne gere pas `mode: "insensitive"` : on compare en minuscules via
@@ -57,6 +63,7 @@ export function construireFiltreIntervention(
         { description: { contains: q } },
         { rapport: { contains: q } },
         { client: { ville: { contains: q } } },
+        { client: { zone: { contains: q } } },
         { client: { adresse: { contains: q } } },
         { client: { numContrat: { contains: q } } },
         { client: { utilisateur: { nom: { contains: q } } } },
@@ -84,4 +91,9 @@ export const OPTIONS_PRIORITE = PRIORITES.map((p) => ({
 export const OPTIONS_TYPE_PANNE = TYPES_PANNE.map((t) => ({
   valeur: t,
   libelle: TYPE_PANNE_LABELS[t],
+}));
+
+export const OPTIONS_ZONE_FILTRE = ZONES.map((z) => ({
+  valeur: z,
+  libelle: z,
 }));

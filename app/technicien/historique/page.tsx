@@ -36,7 +36,7 @@ export default async function HistoriqueTechnicien({
 
   const technicien = await prisma.technicien.findUnique({
     where: { utilisateurId: utilisateur.id },
-    select: { id: true, matricule: true, operateur: { select: { nom: true } } },
+    select: { id: true, matricule: true, zone: true },
   });
 
   if (!technicien) {
@@ -94,7 +94,7 @@ export default async function HistoriqueTechnicien({
   return (
     <div className="mx-auto w-full max-w-5xl px-4 py-8 sm:px-6">
       <EntetePage
-        surtitre={`${technicien.operateur.nom} · ${technicien.matricule}`}
+        surtitre={`${technicien.matricule ?? "FibreConnect"} · zone ${technicien.zone}`}
         titre="Historique"
         description="Toutes vos interventions terminées ou annulées, avec le rapport que vous avez rédigé et la note laissée par l’abonné."
         actions={<BoutonImpression libelle="Imprimer l’historique" />}

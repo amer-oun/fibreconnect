@@ -1,17 +1,20 @@
 # FibreConnect
 
 **FibreConnect est un sous-traitant de maintenance fibre optique en Tunisie.**
-Ses techniciens sont ses propres employés, chacun habilité à intervenir sur le
-réseau d'un seul opérateur — Tunisie Telecom, Ooredoo ou Orange. Le superviseur
-est le dispatcheur de FibreConnect : il voit les trois réseaux parce que c'est
-son entreprise qui intervient sur les trois.
+Ses techniciens sont ses propres employés : ils n'appartiennent à aucun
+opérateur. La société dépanne les abonnés de deux réseaux partenaires —
+Tunisie Telecom et Ooredoo — et chaque technicien couvre un **secteur
+géographique**.
 
 Trois profils s'y croisent : l'abonné qui déclare une panne, le technicien qui
 la traite sur le terrain, et le superviseur qui arbitre.
 
-> **Ce que signifie `Technicien.operateurId`** : le réseau sur lequel le
-> technicien est *habilité*, pas son employeur. C'est de là que découle la
-> règle centrale du projet.
+> **Ce que signifie `Technicien.zone`** : le gouvernorat où le technicien se
+> déplace. C'est de là que découle la règle centrale du projet — un technicien
+> ne voit que les pannes de sa zone, quel que soit l'opérateur de l'abonné.
+>
+> L'opérateur reste dans le modèle, mais comme une information de contrat de
+> l'abonné : il n'influe plus sur qui intervient.
 
 Projet de fin d'études (stage BTP).
 
@@ -37,9 +40,9 @@ Projet de fin d'études (stage BTP).
 
 | Rôle | Ce qu'il peut faire |
 |---|---|
-| **Client** | Déclarer une panne avec photo, suivre son avancement étape par étape, l'annuler, noter le technicien une fois l'intervention terminée |
-| **Technicien** | Consulter les pannes **du réseau sur lequel il est habilité**, les accepter, les démarrer, rédiger le rapport de clôture avec photo, gérer son profil |
-| **Superviseur** | Piloter les trois réseaux : statistiques, affectation manuelle, création et activation des comptes techniciens, carte des abonnés |
+| **Client** | S'inscrire seul, déclarer une panne avec photo, suivre son avancement étape par étape, l'annuler, noter le technicien une fois l'intervention terminée |
+| **Technicien** | S'inscrire seul (compte à valider), consulter les pannes **de sa zone**, les accepter, les démarrer, rédiger le rapport de clôture avec photo, gérer son profil |
+| **Superviseur** | Piloter l'activité : statistiques, couverture des zones, validation des inscriptions techniciens, attribution des matricules et des zones, affectation manuelle, carte des abonnés |
 
 ### Pages
 
@@ -47,24 +50,25 @@ Projet de fin d'études (stage BTP).
 /                               page de garde publique (trois portes)
 /login                          formulaire unique, redirection selon le rôle
 /register                       inscription, réservée aux abonnés
+/register/technicien            candidature technicien (compte en attente)
 
 /client/dashboard               mes demandes + recherche et filtres
 /client/nouvelle-panne          déclaration, avec photo facultative
 /client/suivi/[id]              timeline, rapport, notation, annulation, impression
-/client/profil                  coordonnées et mot de passe
+/client/profil                  coordonnées, zone, mot de passe
 
-/technicien/dashboard           pannes du réseau habilité
+/technicien/dashboard           pannes de la zone couverte
 /technicien/mes-interventions   accepter / démarrer / terminer
 /technicien/historique          interventions passées, rapports, notes
-/technicien/profil              photo, spécialité, zone, disponibilité, mot de passe
+/technicien/profil              photo, spécialité, disponibilité, mot de passe
 
-/superviseur/dashboard          statistiques et graphiques
+/superviseur/dashboard          statistiques, graphiques, couverture des zones
 /superviseur/interventions      affectation, réaffectation, annulation
-/superviseur/techniciens        équipe, activation des comptes
+/superviseur/techniciens        équipe par zone, validation, activation
 /superviseur/techniciens/nouveau  création d'un compte technicien
-/superviseur/techniciens/[id]   fiche complète et journal d'activité
+/superviseur/techniciens/[id]   fiche, validation, changement de zone, journal
 /superviseur/clients            liste et carte OpenStreetMap
-/superviseur/reseaux            opérateurs partenaires, couverture, logos
+/superviseur/reseaux            opérateurs partenaires et logos
 /superviseur/profil             mot de passe
 ```
 
@@ -89,9 +93,13 @@ Projet de fin d'études (stage BTP).
 ## Schéma de la base
 
 Six tables. SQLite ne supportant pas les `enum` Prisma, les champs `role`,
-`statut`, `priorite` et `typePanne` sont des `String` dont les valeurs
-autorisées sont centralisées dans `lib/constants.ts` et validées par zod à
-chaque écriture.
+`statutCompte`, `statut`, `priorite`, `typePanne` et `zone` sont des `String`
+dont les valeurs autorisées sont centralisées dans `lib/constants.ts` et
+validées par zod à chaque écriture.
+
+Noter qu'aucune relation ne relie `Operateur` à `Technicien` : c'est la
+traduction dans le schéma du fait que les techniciens sont des employés de
+FibreConnect. Le lien qui compte est `Client.zone` ↔ `Technicien.zone`.
 
 ```mermaid
 erDiagram
@@ -99,7 +107,6 @@ erDiagram
     Utilisateur ||--o| Technicien : "profil"
     Utilisateur ||--o{ Intervention : "supervise"
     Operateur   ||--o{ Client : "abonnés"
-    Operateur   ||--o{ Technicien : "équipe"
     Client      ||--o{ Intervention : "déclare"
     Technicien  ||--o{ Intervention : "traite"
     Technicien  ||--o{ Historique : "agit"
@@ -113,7 +120,7 @@ erDiagram
         string   nom
         string   prenom
         string   telephone
-        boolean  actif "defaut true"
+        string   statutCompte "ACTIF|EN_ATTENTE|DESACTIVE"
         datetime creeLe
     }
 
@@ -129,6 +136,7 @@ erDiagram
         string operateurId FK
         string adresse
         string ville
+        string zone "gouvernorat - regle centrale"
         string numContrat UK
         float  latitude "nullable"
         float  longitude "nullable"
@@ -137,10 +145,9 @@ erDiagram
     Technicien {
         string  id PK
         string  utilisateurId FK "unique"
-        string  operateurId FK
-        string  matricule UK
+        string  matricule UK "nullable avant validation"
         string  specialite
-        string  zone
+        string  zone "gouvernorat - regle centrale"
         boolean disponible "defaut true"
         string  photoUrl "nullable"
     }
@@ -180,9 +187,17 @@ erDiagram
 | Champ | Valeurs |
 |---|---|
 | `role` | `CLIENT`, `TECHNICIEN`, `SUPERVISEUR` |
+| `statutCompte` | `ACTIF`, `EN_ATTENTE`, `DESACTIVE` |
 | `statut` | `NOUVELLE` → `ASSIGNEE` → `EN_COURS` → `TERMINEE`, plus `ANNULEE` |
 | `priorite` | `BASSE`, `NORMALE`, `HAUTE`, `URGENTE` |
 | `typePanne` | `COUPURE_TOTALE`, `DEBIT_FAIBLE`, `ONT_DEFECTUEUX`, `CABLE_ENDOMMAGE`, `NOUVELLE_INSTALLATION`, `CHANGEMENT_ROUTEUR`, `AUTRE` |
+| `zone` | `Tunis`, `Ariana`, `Ben Arous`, `Manouba`, `Nabeul`, `Bizerte`, `Sousse`, `Monastir`, `Sfax` |
+
+**Pourquoi une liste fermée de gouvernorats et non la ville.** Comparer des
+villes laisserait un abonné de « La Marsa » invisible pour le technicien qui
+couvre « Tunis », et une simple faute de frappe masquerait une panne pour tout
+le monde — sans message d'erreur, ce qui est la pire façon pour une règle
+d'aiguillage d'échouer.
 
 ---
 
@@ -217,7 +232,7 @@ L'application démarre sur <http://localhost:3000>.
 ```bash
 npm run build       # build de production
 npm start           # lancer le build de production
-npm test            # règles métier, limitation, pagination (40 tests)
+npm test            # règles métier, limitation, pagination (50 tests)
 npm run test:watch  # tests en continu pendant le développement
 npm run lint        # ESLint
 npx tsc --noEmit    # vérification des types
@@ -235,70 +250,121 @@ exécutions produisent exactement le même jeu de données.
 
 Mot de passe commun à tous les comptes : **`Passer123`**
 
-| Rôle | Adresse e-mail | Détail |
-|---|---|---|
-| Superviseur | `superviseur@fibreconnect.tn` | Leila Ben Salah |
-| Technicien | `karim.bouazizi@fibreconnect.tn` | Tunisie Telecom · Tunis |
-| Technicien | `sonia.trabelsi@fibreconnect.tn` | Tunisie Telecom · Ariana |
-| Technicien | `mehdi.gharbi@fibreconnect.tn` | Ooredoo · Ben Arous |
-| Technicien | `amine.jlassi@fibreconnect.tn` | Orange · Sfax |
-| Client | `nadia.chaabane@example.tn` | Tunisie Telecom · Tunis |
-| Client | `youssef.mansouri@example.tn` | Tunisie Telecom · Ariana |
-| Client | `ines.khelifi@example.tn` | Tunisie Telecom · La Marsa |
-| Client | `slim.ferchichi@example.tn` | Ooredoo · Ben Arous |
-| Client | `rania.abdallah@example.tn` | Ooredoo · Sousse |
-| Client | `hatem.zouari@example.tn` | Orange · Sfax |
+| Rôle | Adresse e-mail | Matricule | Zone |
+|---|---|---|---|
+| Superviseur | `superviseur@fibreconnect.tn` | — | toutes |
+| Technicien | `karim.bouazizi@fibreconnect.tn` | FC-001 | Tunis |
+| Technicien | `sonia.trabelsi@fibreconnect.tn` | FC-002 | Ariana |
+| Technicien | `mehdi.gharbi@fibreconnect.tn` | FC-003 | Ben Arous |
+| Technicien | `amine.jlassi@fibreconnect.tn` | FC-004 | Sfax |
+| Technicien | `yosr.hamdi@fibreconnect.tn` | FC-005 | Tunis |
 
-Le jeu de données contient 3 opérateurs, 11 utilisateurs, 32 interventions
-réparties sur 6 mois et 105 lignes d'historique.
+| Rôle | Adresse e-mail | Opérateur | Ville (zone) |
+|---|---|---|---|
+| Client | `nadia.chaabane@example.tn` | Tunisie Telecom | Tunis (Tunis) |
+| Client | `youssef.mansouri@example.tn` | Tunisie Telecom | Ariana (Ariana) |
+| Client | `ines.khelifi@example.tn` | Tunisie Telecom | La Marsa (Tunis) |
+| Client | `slim.ferchichi@example.tn` | Ooredoo | Ben Arous (Ben Arous) |
+| Client | `rania.abdallah@example.tn` | Ooredoo | Sousse (Sousse) |
+| Client | `hatem.zouari@example.tn` | Ooredoo | Sfax (Sfax) |
+
+Le jeu de données contient 2 opérateurs, 12 utilisateurs, 33 interventions
+réparties sur 6 mois et 106 lignes d'historique.
+
+Deux détails du jeu de données sont volontaires et servent la démonstration :
+
+- **Inès habite La Marsa mais relève de la zone Tunis.** C'est le cas qui
+  justifie de ne pas comparer les villes.
+- **Rania est en zone Sousse, que personne ne couvre.** Sa panne n'apparaît
+  chez aucun technicien, et le tableau de bord du superviseur l'affiche en
+  alerte. Créez un technicien sur Sousse, ou affectez la panne à la main.
 
 La page `/login` affiche ces comptes dans un panneau dépliant. Passez
 `NEXT_PUBLIC_MODE_DEMO="false"` dans `.env` pour le masquer en production.
 
 ### Scénario de démonstration
 
-1. Connectez-vous en **client** (`nadia.chaabane@example.tn`) et déclarez une panne.
-2. Connectez-vous en **technicien Tunisie Telecom** (`karim.bouazizi@…`) : la
+1. Connectez-vous en **client** (`nadia.chaabane@example.tn`, zone Tunis) et
+   déclarez une panne.
+2. Connectez-vous en **technicien de la zone Tunis** (`karim.bouazizi@…`) : la
    panne apparaît dans « Pannes disponibles ». Acceptez-la, démarrez-la, puis
    clôturez-la avec un rapport.
-3. Connectez-vous en **technicien Orange** (`amine.jlassi@…`) : cette même panne
-   n'apparaît **jamais**, l'abonné n'étant pas chez son opérateur. C'est la
+3. Connectez-vous en **technicien de Sfax** (`amine.jlassi@…`) : cette même
+   panne n'apparaît **jamais**, l'abonné n'étant pas dans sa zone. C'est la
    règle centrale du projet.
 4. Revenez en **client** : la timeline montre chaque étape, et vous pouvez noter
    l'intervention.
 5. Connectez-vous en **superviseur** pour voir les statistiques mises à jour,
-   réaffecter une intervention ou désactiver un compte technicien.
+   l'alerte sur la zone de Sousse, réaffecter une intervention ou désactiver
+   un compte technicien.
+
+### Démonstration de l'inscription technicien
+
+1. Depuis `/login`, suivez « Déposer une candidature » et inscrivez-vous en
+   choisissant la zone **Sousse**.
+2. Essayez de vous connecter : la connexion est refusée avec « votre compte sera
+   actif dès que le superviseur l'aura validé ».
+3. En **superviseur**, page Techniciens : la demande est en tête de liste.
+   Ouvrez-la, attribuez un matricule, validez.
+4. Reconnectez-vous avec le compte technicien : la panne de Rania, que personne
+   ne voyait, apparaît enfin — et l'alerte de couverture disparaît du tableau
+   de bord.
 
 ---
 
 ## Règles métier
 
 1. Une intervention est créée par un client avec le statut `NOUVELLE` et sans technicien.
-2. **Un technicien ne voit que les interventions `NOUVELLE` dont le client
-   appartient au même opérateur que lui.** C'est la règle centrale : elle est
-   appliquée dans la requête SQL, et revérifiée côté serveur à l'acceptation.
+2. **Un technicien ne voit que les interventions `NOUVELLE` dont le client est
+   dans la même zone que lui.** C'est la règle centrale : elle est appliquée
+   dans la requête SQL, et revérifiée côté serveur à l'acceptation. L'opérateur
+   de l'abonné n'entre pas dans ce filtre.
 3. Lorsqu'un technicien accepte : statut → `ASSIGNEE` et `technicienId` renseigné.
+   Deux techniciens d'une même zone voient la même panne : l'acceptation passe
+   par un `updateMany` conditionnel, jamais par une lecture suivie d'une
+   écriture, pour qu'un seul l'obtienne.
 4. « Démarrer » → `EN_COURS` + `dateDebut`. « Terminer » → `TERMINEE` +
    `dateFin` + rapport obligatoire d'au moins 10 caractères.
 5. Le superviseur peut créer un compte technicien, affecter ou réaffecter
-   n'importe quelle intervention à n'importe quel technicien habilité sur le
-   réseau de l'abonné, et désactiver un compte technicien (`actif = false`).
-   La désactivation n'est jamais bloquée : si des interventions sont encore
-   ouvertes, l'interface les compte et le signale avant de confirmer.
-6. Un utilisateur dont le compte a `actif = false` ne peut pas se connecter.
+   n'importe quelle intervention à n'importe quel technicien — **y compris hors
+   de sa zone**, ce que l'historique consigne mot pour mot. C'est le seul
+   recours quand une zone n'a personne. Il peut aussi désactiver un compte,
+   ce qui n'est jamais bloqué : si des interventions sont encore ouvertes,
+   l'interface les compte et le signale avant de confirmer.
+6. Seul un compte `ACTIF` peut se connecter. `EN_ATTENTE` et `DESACTIVE` sont
+   refusés, avec des messages distincts — une inscription en cours d'examen
+   n'est pas un rejet.
 7. Le client peut noter (1 à 5) une intervention `TERMINEE`, une seule fois.
 8. Le client comme le superviseur peuvent annuler une intervention tant qu'elle
    n'est ni terminée ni déjà annulée. Un technicien ne le peut pas.
+9. Un technicien peut s'inscrire seul depuis `/register/technicien`. Son compte
+   naît `EN_ATTENTE`, sans matricule et marqué indisponible. Le superviseur lui
+   attribue matricule et zone, ce qui l'active — en un seul geste, dans une
+   transaction, pour qu'aucun état intermédiaire absurde n'existe (compte actif
+   sans matricule, ou technicien affecté qui ne peut pas se connecter).
+10. La zone d'un technicien n'est pas dans le profil qu'il modifie lui-même :
+    elle décide des pannes qui lui sont proposées, la choisir reviendrait à
+    choisir son travail. Seul le superviseur la change.
 
 ### Ces règles sont testées
 
-`npm test` exécute 40 tests.
+`npm test` exécute 50 tests.
 
-Les 15 premiers portent sur les règles métier et tournent contre une base
+Les 25 premiers portent sur les règles métier et tournent contre une base
 SQLite jetable, construite à partir des vraies migrations : cycle complet des
 statuts, refus des transitions illégales, absence d'écriture d'historique quand
-une transition est refusée, filtre par réseau, contrôles de propriété, notation
+une transition est refusée, filtre par zone, contrôles de propriété, notation
 unique.
+
+Deux d'entre eux méritent d'être signalés :
+
+- **Le filtre ignore l'opérateur.** Les deux abonnés du jeu de test partagent le
+  même opérateur et diffèrent par la zone. Si la règle centrale retombait un
+  jour sur `operateurId`, ce test échouerait — alors qu'avec deux opérateurs
+  différents il aurait passé pour la mauvaise raison.
+- **L'acceptation concurrente.** Deux techniciens de la même zone acceptent la
+  même panne en parallèle : le test vérifie qu'un seul `updateMany` touche une
+  ligne, l'autre zéro.
 
 Les 12 suivants portent sur la limitation des tentatives de connexion. Le
 limiteur reçoit l'instant courant en paramètre, si bien qu'une fenêtre de
@@ -513,10 +579,10 @@ projet — délibérément **pas** dans `public/`. Un build de production sert
 nom de fichier est tiré au sort et le format est vérifié sur les octets du
 fichier, pas sur son extension.
 
-**Logos et portraits dégradent proprement.** Les logos des trois opérateurs
-sont leur propriété et n'accompagnent pas ce dépôt ; le superviseur les
-téléverse depuis `/superviseur/reseaux`. Tant qu'aucun fichier n'est posé,
-l'interface affiche un monogramme (« TT », « OO », « OR ») et les initiales du
+**Logos et portraits dégradent proprement.** Les logos des opérateurs
+partenaires sont leur propriété et n'accompagnent pas ce dépôt ; le superviseur
+les téléverse depuis `/superviseur/reseaux`. Tant qu'aucun fichier n'est posé,
+l'interface affiche un monogramme (« TT », « OO ») et les initiales du
 technicien — jamais un carré vide ni une silhouette grise.
 
 **Accessibilité des couleurs.** Les couleurs de statut imposées par le cahier
@@ -525,9 +591,13 @@ et « Annulée » (rouge) ne sont pas distinguables par une personne atteinte de
 deutéranopie (ΔE 5,0 pour un seuil de 8). La palette a été conservée, mais
 **aucune information ne repose sur la couleur seule** : chaque badge porte son
 libellé, chaque barre de graphique affiche sa valeur, chaque série est nommée
-dans une légende, et le tableau de bord propose une table de repli. La paire de
-couleurs du graphique temporel (`#0891B2` / `#16A34A`) a été choisie parce
-qu'elle passe les six contrôles du validateur.
+dans une légende, et le tableau de bord propose une table de repli.
+
+Les couleurs elles-mêmes ont été re-mesurées plutôt que choisies à l'œil : les
+évidents `#16A34A` / `#DC2626` donnent ΔE 5,0 sous deutéranopie, sous le seuil
+de 8. La paire retenue est `#15803D` / `#921C1C` (ΔE 8,7), séparée sur la
+clarté — le seul canal qu'un daltonisme laisse intact. Le graphique temporel
+utilise `#1D4ED8` / `#15803D`, ΔE 27,3.
 
 ---
 

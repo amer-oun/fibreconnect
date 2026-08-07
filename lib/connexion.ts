@@ -13,6 +13,14 @@
 export const ERREUR_COMPTE_DESACTIVE = "COMPTE_DESACTIVE";
 
 /**
+ * Le compte existe mais attend la validation du superviseur : c'est le cas
+ * d'un technicien qui vient de s'inscrire. Message distinct de la
+ * désactivation — « contactez votre superviseur » n'aide pas quelqu'un dont la
+ * demande est simplement en cours d'examen.
+ */
+export const ERREUR_COMPTE_EN_ATTENTE = "COMPTE_EN_ATTENTE";
+
+/**
  * Trop d'échecs consécutifs. Le nombre de secondes à attendre est collé
  * derrière, séparé par « : » — d'où `TROP_DE_TENTATIVES:840`.
  */
@@ -34,6 +42,10 @@ export function formaterAttente(secondes: number): string {
 export function messageDErreurConnexion(code: string): string {
   if (code === ERREUR_COMPTE_DESACTIVE) {
     return "Ce compte a été désactivé. Contactez votre superviseur.";
+  }
+
+  if (code === ERREUR_COMPTE_EN_ATTENTE) {
+    return "Votre inscription a bien été reçue. Votre compte sera actif dès que le superviseur l’aura validé.";
   }
 
   if (code.startsWith(`${ERREUR_TROP_DE_TENTATIVES}:`)) {

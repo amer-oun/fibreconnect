@@ -51,15 +51,26 @@ export default async function PageConnexion({
 
           <FormulaireConnexion callbackUrl={destination} />
 
-          <p className="mt-6 border-t border-trait pt-5 text-sm text-ardoise">
-            Vous êtes abonné et vous n’avez pas encore de compte ?{" "}
-            <Link
-              href="/register"
-              className="font-medium text-nuit underline decoration-signal decoration-2 underline-offset-4 hover:text-signal-profond"
-            >
-              Créer un compte client
-            </Link>
-          </p>
+          <div className="mt-6 space-y-2 border-t border-trait pt-5 text-sm text-ardoise">
+            <p>
+              Vous êtes abonné et vous n’avez pas encore de compte ?{" "}
+              <Link
+                href="/register"
+                className="font-medium text-nuit underline decoration-signal decoration-2 underline-offset-4 hover:text-signal-profond"
+              >
+                Créer un compte client
+              </Link>
+            </p>
+            <p>
+              Vous êtes technicien fibre ?{" "}
+              <Link
+                href="/register/technicien"
+                className="font-medium text-nuit underline decoration-signal decoration-2 underline-offset-4 hover:text-signal-profond"
+              >
+                Déposer une candidature
+              </Link>
+            </p>
+          </div>
         </div>
 
         {modeDemo && <ComptesDemonstration />}

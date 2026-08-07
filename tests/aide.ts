@@ -43,22 +43,23 @@ export function supprimerBase() {
 type Prisma = Awaited<ReturnType<typeof preparerBase>>;
 
 /**
- * Jeu minimal : deux reseaux, deux techniciens, deux abonnes.
- * Assez pour eprouver la regle centrale sans dependre du seed de demonstration.
+ * Jeu minimal : deux zones, deux techniciens, deux abonnes, un seul operateur.
+ *
+ * L'operateur est le meme pour les deux abonnes, volontairement : si la regle
+ * centrale se laissait encore influencer par lui, les tests de zone
+ * passeraient pour la mauvaise raison.
  */
 export async function semerJeuDeTest(prisma: Prisma) {
-  const [reseauA, reseauB] = await Promise.all([
-    prisma.operateur.create({ data: { nom: "Réseau A" } }),
-    prisma.operateur.create({ data: { nom: "Réseau B" } }),
-  ]);
+  const operateur = await prisma.operateur.create({
+    data: { nom: "Opérateur de test" },
+  });
 
-  const creerTechnicien = (nom: string, operateurId: string, matricule: string) =>
+  const creerTechnicien = (nom: string, zone: string, matricule: string) =>
     prisma.technicien.create({
       data: {
         matricule,
         specialite: "Raccordement",
-        zone: "Tunis",
-        operateur: { connect: { id: operateurId } },
+        zone,
         utilisateur: {
           create: {
             email: `${matricule.toLowerCase()}@test.tn`,
@@ -72,13 +73,14 @@ export async function semerJeuDeTest(prisma: Prisma) {
       },
     });
 
-  const creerClient = (nom: string, operateurId: string, contrat: string) =>
+  const creerClient = (nom: string, zone: string, contrat: string) =>
     prisma.client.create({
       data: {
         adresse: "1 rue de Test",
-        ville: "Tunis",
+        ville: zone,
+        zone,
         numContrat: contrat,
-        operateur: { connect: { id: operateurId } },
+        operateur: { connect: { id: operateur.id } },
         utilisateur: {
           create: {
             email: `${contrat.toLowerCase()}@test.tn`,
@@ -93,11 +95,11 @@ export async function semerJeuDeTest(prisma: Prisma) {
     });
 
   const [techA, techB, clientA, clientB] = await Promise.all([
-    creerTechnicien("TechA", reseauA.id, "A-001"),
-    creerTechnicien("TechB", reseauB.id, "B-001"),
-    creerClient("ClientA", reseauA.id, "CTR-A"),
-    creerClient("ClientB", reseauB.id, "CTR-B"),
+    creerTechnicien("TechA", "Tunis", "A-001"),
+    creerTechnicien("TechB", "Sfax", "B-001"),
+    creerClient("ClientA", "Tunis", "CTR-A"),
+    creerClient("ClientB", "Sfax", "CTR-B"),
   ]);
 
-  return { reseauA, reseauB, techA, techB, clientA, clientB };
+  return { operateur, techA, techB, clientA, clientB };
 }

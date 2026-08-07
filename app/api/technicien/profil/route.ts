@@ -11,8 +11,10 @@ import {
 /**
  * Le technicien met à jour son propre profil.
  *
- * Il ne peut modifier que ce qui le concerne au quotidien. Le matricule,
- * l'opérateur et l'activation du compte restent la main du superviseur.
+ * Il ne peut modifier que ce qui le concerne au quotidien. Le matricule, la
+ * zone et l'état du compte restent la main du superviseur : la zone décide
+ * quelles pannes lui sont proposées, la choisir soi-même reviendrait à choisir
+ * son secteur.
  */
 export async function PATCH(requete: Request) {
   try {
@@ -32,7 +34,6 @@ export async function PATCH(requete: Request) {
         where: { id: technicien.id },
         data: {
           specialite: donnees.specialite,
-          zone: donnees.zone,
           disponible: donnees.disponible,
           photoUrl: donnees.photoUrl ?? null,
         },
