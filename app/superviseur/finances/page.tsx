@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import Link from "next/link";
 
 import { prisma } from "@/lib/prisma";
 import { exigerRole } from "@/lib/session";
@@ -283,9 +284,12 @@ export default async function PageFinances() {
                   {impayees.map((f) => (
                     <tr key={f.id}>
                       <td className="px-4 py-3 sm:px-5">
-                        <span className="font-mono text-xs text-nuit">
+                        <Link
+                          href={`/superviseur/factures/${f.id}`}
+                          className="font-mono text-xs text-nuit underline decoration-signal decoration-2 underline-offset-4"
+                        >
                           {f.numero}
-                        </span>
+                        </Link>
                         <span className="ml-2">
                           <BadgeFacture statut={f.statut} />
                         </span>

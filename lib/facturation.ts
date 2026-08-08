@@ -138,6 +138,132 @@ export async function emettreFacture(
 }
 
 /* -------------------------------------------------------------------------- */
+/* Rectification par le superviseur                                           */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * Correcting and cancelling an invoice — the supervisor's two escape hatches.
+ *
+ * A technician who types 2100 DT instead of 210 DT creates a debt the
+ * subscriber cannot dispute and nobody could fix; that is not an acceptable
+ * state for an application that prints amounts. So an unpaid invoice can be
+ * corrected, and one that should never have been issued can be cancelled.
+ *
+ * Both refuse as soon as **any** payment has been confirmed, even partially.
+ * Moving the total under the feet of someone who has already paid part of it
+ * produces a figure neither side can reconcile; that case needs a credit note,
+ * which this version does not have (see the README's known limits).
+ *
+ * Both require a reason, stored on the invoice. An amount that changes without
+ * anyone knowing why is indefensible in front of the subscriber and in front of
+ * the technician who drew it up.
+ */
+async function exigerRectifiable(db: Db, factureId: string) {
+  const facture = await db.facture.findUnique({
+    where: { id: factureId },
+    select: { id: true, statut: true, numero: true },
+  });
+  if (!facture) {
+    throw new ErreurMetier("Cette facture n’existe pas.", 404);
+  }
+  if (facture.statut === "ANNULEE") {
+    throw new ErreurMetier("Cette facture est déjà annulée.");
+  }
+  if (facture.statut === "PAYEE") {
+    throw new ErreurMetier(
+      "Cette facture est soldée : elle ne peut plus être modifiée.",
+    );
+  }
+
+  const regles = await db.paiement.count({
+    where: { factureId, statut: "CONFIRME" },
+  });
+  if (regles > 0) {
+    throw new ErreurMetier(
+      "Cette facture a déjà reçu un règlement partiel : son montant ne peut plus changer.",
+    );
+  }
+
+  return facture;
+}
+
+/** Remplace les lignes d'une facture non réglée et recalcule son total. */
+export async function corrigerFacture({
+  factureId,
+  superviseurId,
+  motif,
+  lignes,
+}: {
+  factureId: string;
+  superviseurId: string;
+  motif: string;
+  lignes: PieceFacturee[];
+}) {
+  if (lignes.length === 0) {
+    throw new ErreurMetier(
+      "Une facture doit garder au moins une ligne. Pour ne rien facturer, annulez-la.",
+      400,
+    );
+  }
+
+  return prisma.$transaction(async (tx) => {
+    await exigerRectifiable(tx, factureId);
+
+    await tx.ligneFacture.deleteMany({ where: { factureId } });
+
+    return tx.facture.update({
+      where: { id: factureId },
+      data: {
+        montantTotal: lignes.reduce((s, l) => s + l.montant, 0),
+        lignes: { create: lignes },
+        motifRectification: motif,
+        dateRectification: new Date(),
+        rectifieePar: superviseurId,
+      },
+      include: { lignes: true },
+    });
+  });
+}
+
+/**
+ * Annule une facture qui n'aurait pas dû être émise.
+ *
+ * Terminal : une facture annulée ne se rouvre pas et l'intervention n'en reçoit
+ * pas de nouvelle — la relation est un-à-un. C'est le geste du « rien à
+ * facturer » (garantie, geste commercial), pas celui de la faute de frappe, qui
+ * se répare avec `corrigerFacture`.
+ */
+export async function annulerFacture({
+  factureId,
+  superviseurId,
+  motif,
+}: {
+  factureId: string;
+  superviseurId: string;
+  motif: string;
+}) {
+  return prisma.$transaction(async (tx) => {
+    await exigerRectifiable(tx, factureId);
+
+    // Un paiement commence sur une facture annulee n'a plus d'objet.
+    await tx.paiement.updateMany({
+      where: { factureId, statut: "EN_ATTENTE" },
+      data: { statut: "ECHOUE" },
+    });
+
+    return tx.facture.update({
+      where: { id: factureId },
+      data: {
+        statut: "ANNULEE",
+        motifRectification: motif,
+        dateRectification: new Date(),
+        rectifieePar: superviseurId,
+      },
+    });
+  });
+}
+
+/* -------------------------------------------------------------------------- */
 /* Solde                                                                      */
 /* -------------------------------------------------------------------------- */
 
@@ -608,6 +734,8 @@ export const selectionFacture = {
   statut: true,
   dateEmission: true,
   datePaiement: true,
+  motifRectification: true,
+  dateRectification: true,
   lignes: { select: { id: true, designation: true, montant: true } },
   paiements: {
     select: {

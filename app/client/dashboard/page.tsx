@@ -1,8 +1,11 @@
 import type { Metadata } from "next";
+import Link from "next/link";
 
 import { prisma } from "@/lib/prisma";
 import { exigerRole } from "@/lib/session";
 import { selectionListe } from "@/lib/interventions";
+import { restesAPayer } from "@/lib/facturation";
+import { formaterMontant, formaterMontantCourt } from "@/lib/monnaie";
 import { ACCENTS } from "@/lib/constants";
 import {
   OPTIONS_PRIORITE,
@@ -42,7 +45,7 @@ export default async function TableauDeBordClient({
     );
   }
 
-  const [interventions, compteurs] = await Promise.all([
+  const [interventions, compteurs, impayees] = await Promise.all([
     prisma.intervention.findMany({
       where: {
         AND: [{ clientId: client.id }, construireFiltreIntervention(parametres)],
@@ -55,7 +58,21 @@ export default async function TableauDeBordClient({
       where: { clientId: client.id },
       _count: true,
     }),
+    prisma.facture.findMany({
+      where: { statut: "A_PAYER", intervention: { clientId: client.id } },
+      orderBy: { dateEmission: "asc" },
+      select: {
+        id: true,
+        numero: true,
+        montantTotal: true,
+        intervention: { select: { id: true } },
+      },
+    }),
   ]);
+
+  // Le solde vient de la base, pas d'une addition dans le navigateur.
+  const soldes = await restesAPayer(prisma, impayees);
+  const resteDu = [...soldes.values()].reduce((s, m) => s + m, 0);
 
   const parStatut = Object.fromEntries(
     compteurs.map((c) => [c.statut, c._count]),
@@ -81,6 +98,35 @@ export default async function TableauDeBordClient({
         }
       />
 
+      {/* Ce qui appelle un geste passe avant l'etat des lieux : un abonne qui
+          doit de l'argent doit l'apprendre ici, pas en ouvrant chaque fiche. */}
+      {impayees.length > 0 && (
+        <div
+          role="status"
+          className="mb-6 flex flex-wrap items-center justify-between gap-3 rounded-bloc border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-900"
+        >
+          <p>
+            <span className="font-medium">
+              {impayees.length === 1
+                ? "Une facture à régler"
+                : `${impayees.length} factures à régler`}
+            </span>{" "}
+            — <span className="tabulaire">{formaterMontant(resteDu)}</span> au total.
+          </p>
+          <span className="flex flex-wrap gap-2">
+            {impayees.map((f) => (
+              <Link
+                key={f.id}
+                href={`/client/suivi/${f.intervention.id}`}
+                className="font-mono text-xs underline decoration-2 underline-offset-4"
+              >
+                {f.numero}
+              </Link>
+            ))}
+          </span>
+        </div>
+      )}
+
       <div className="mb-6 grid grid-cols-2 gap-5 sm:grid-cols-4">
         <Indicateur libelle="En cours" valeur={enCours} accent={ACCENTS.attention} />
         <Indicateur
@@ -89,11 +135,16 @@ export default async function TableauDeBordClient({
           accent={ACCENTS.succes}
         />
         <Indicateur
-          libelle="Annulées"
-          valeur={parStatut.ANNULEE ?? 0}
-          accent={ACCENTS.danger}
+          libelle="À régler"
+          valeur={formaterMontantCourt(resteDu)}
+          accent={resteDu > 0 ? ACCENTS.attention : ACCENTS.neutre}
+          precision={
+            impayees.length > 0
+              ? `${impayees.length} facture${impayees.length > 1 ? "s" : ""}`
+              : "rien à payer"
+          }
         />
-        <Indicateur libelle="Total" valeur={total} />
+        <Indicateur libelle="Total des demandes" valeur={total} />
       </div>
 
       <Panneau>
@@ -112,7 +163,7 @@ export default async function TableauDeBordClient({
             message={
               filtre
                 ? "Aucune de vos demandes ne correspond à ces critères. Élargissez la recherche ou effacez les filtres."
-                : "Dès qu’un problème survient sur votre ligne, déclarez-le ici : un technicien de votre opérateur le verra immédiatement."
+                : "Dès qu’un problème survient sur votre ligne, déclarez-le ici : un technicien FibreConnect de votre secteur le verra immédiatement."
             }
             action={
               !filtre && (

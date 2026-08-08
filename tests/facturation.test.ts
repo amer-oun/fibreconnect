@@ -4,8 +4,10 @@ import { preparerBase, semerJeuDeTest, supprimerBase } from "./aide";
 import { prisma as client } from "@/lib/prisma";
 import { ErreurMetier, changerStatut, creerIntervention } from "@/lib/interventions";
 import {
+  annulerFacture,
   bilanFinancier,
   confirmerPaiement,
+  corrigerFacture,
   confirmerVersement,
   declarerVersement,
   echouerPaiement,
@@ -350,6 +352,159 @@ describe("Espèces et dette du technicien", () => {
     await expect(
       declarerVersement({ technicienId: jeu.techB.id }),
     ).rejects.toBeInstanceOf(ErreurMetier);
+  });
+});
+
+describe("Rectification d'une facture", () => {
+  const SUPERVISEUR = "superviseur-de-test";
+
+  it("corrige les lignes et recalcule le total", async () => {
+    const { factureId } = await interventionFacturee({
+      typePanne: "CHANGEMENT_ROUTEUR",
+      // La faute de frappe qui justifie tout ce mécanisme : 2100 DT au lieu
+      // de 210 DT, sur une facture que l'abonné reçoit telle quelle.
+      pieces: [{ designation: "Routeur Wi-Fi 6", montant: 2_100_000 }],
+    });
+
+    const avant = await prisma.facture.findUniqueOrThrow({
+      where: { id: factureId },
+    });
+    expect(avant.montantTotal).toBe(TARIFS.CHANGEMENT_ROUTEUR + 2_100_000);
+
+    const apres = await corrigerFacture({
+      factureId,
+      superviseurId: SUPERVISEUR,
+      motif: "Routeur facturé 2100 DT au lieu de 210 DT.",
+      lignes: [
+        { designation: "Déplacement et main-d’œuvre", montant: TARIFS.CHANGEMENT_ROUTEUR },
+        { designation: "Routeur Wi-Fi 6", montant: 210_000 },
+      ],
+    });
+
+    expect(apres.lignes).toHaveLength(2);
+    expect(apres.montantTotal).toBe(TARIFS.CHANGEMENT_ROUTEUR + 210_000);
+    expect(apres.montantTotal).toBe(
+      apres.lignes.reduce((s, l) => s + l.montant, 0),
+    );
+    expect(apres.motifRectification).toContain("2100 DT");
+    expect(apres.rectifieePar).toBe(SUPERVISEUR);
+    expect(await resteAPayer(client, factureId)).toBe(apres.montantTotal);
+  });
+
+  it("ne laisse pas une facture sans ligne", async () => {
+    const { factureId } = await interventionFacturee();
+
+    await expect(
+      corrigerFacture({
+        factureId,
+        superviseurId: SUPERVISEUR,
+        motif: "Tentative de facture vide.",
+        lignes: [],
+      }),
+    ).rejects.toBeInstanceOf(ErreurMetier);
+  });
+
+  it("annule une facture, éteint le reste dû et fait échouer le paiement en cours", async () => {
+    const { factureId } = await interventionFacturee();
+    const paiement = await ouvrirPaiement({ factureId, moyen: "VIREMENT" });
+
+    await annulerFacture({
+      factureId,
+      superviseurId: SUPERVISEUR,
+      motif: "Intervention sous garantie, aucun montant dû.",
+    });
+
+    const facture = await prisma.facture.findUniqueOrThrow({
+      where: { id: factureId },
+    });
+    expect(facture.statut).toBe("ANNULEE");
+    expect(facture.motifRectification).toContain("garantie");
+    expect(await resteAPayer(client, factureId)).toBe(0);
+
+    // Un virement annoncé sur une facture annulée n'a plus d'objet.
+    const regle = await prisma.paiement.findUniqueOrThrow({
+      where: { reference: paiement.reference },
+    });
+    expect(regle.statut).toBe("ECHOUE");
+  });
+
+  it("refuse de rectifier ce qui a déjà été payé, même en partie", async () => {
+    const { factureId } = await interventionFacturee();
+    await encaisserEspeces({
+      factureId,
+      technicienId: jeu.techA.id,
+      montant: Math.round(TARIFS.COUPURE_TOTALE / 2),
+    });
+
+    // Deplacer le total sous les pieds de quelqu'un qui a deja paye une moitie
+    // produit un chiffre qu'aucune des deux parties ne peut rapprocher.
+    await expect(
+      corrigerFacture({
+        factureId,
+        superviseurId: SUPERVISEUR,
+        motif: "Tentative après règlement partiel.",
+        lignes: [{ designation: "Autre montant", montant: 10_000 }],
+      }),
+    ).rejects.toBeInstanceOf(ErreurMetier);
+
+    await expect(
+      annulerFacture({
+        factureId,
+        superviseurId: SUPERVISEUR,
+        motif: "Tentative après règlement partiel.",
+      }),
+    ).rejects.toBeInstanceOf(ErreurMetier);
+  });
+
+  it("refuse de rectifier une facture soldée ou déjà annulée", async () => {
+    const soldee = await interventionFacturee();
+    const paiement = await ouvrirPaiement({
+      factureId: soldee.factureId,
+      moyen: "CARTE",
+    });
+    await confirmerPaiement(paiement.reference);
+
+    await expect(
+      annulerFacture({
+        factureId: soldee.factureId,
+        superviseurId: SUPERVISEUR,
+        motif: "Tentative sur facture soldée.",
+      }),
+    ).rejects.toBeInstanceOf(ErreurMetier);
+
+    const annulee = await interventionFacturee();
+    await annulerFacture({
+      factureId: annulee.factureId,
+      superviseurId: SUPERVISEUR,
+      motif: "Geste commercial accordé à l’abonné.",
+    });
+    await expect(
+      annulerFacture({
+        factureId: annulee.factureId,
+        superviseurId: SUPERVISEUR,
+        motif: "Deuxième tentative sur la même facture.",
+      }),
+    ).rejects.toBeInstanceOf(ErreurMetier);
+  });
+
+  it("sort une facture annulée du chiffre d'affaires", async () => {
+    const avant = await bilanFinancier();
+    const { factureId } = await interventionFacturee();
+    const montant = (
+      await prisma.facture.findUniqueOrThrow({ where: { id: factureId } })
+    ).montantTotal;
+
+    const pendant = await bilanFinancier();
+    expect(pendant.facture).toBe(avant.facture + montant);
+
+    await annulerFacture({
+      factureId,
+      superviseurId: SUPERVISEUR,
+      motif: "Facture émise par erreur sur cette intervention.",
+    });
+
+    const apres = await bilanFinancier();
+    expect(apres.facture).toBe(avant.facture);
   });
 });
 

@@ -77,6 +77,26 @@ export default function PanneauFacture({
             ` · soldée le ${formaterDateHeure(facture.datePaiement)}`}
         </p>
 
+        {/* Une facture qui a bougé le dit, et dit pourquoi. Sans cette ligne,
+            l'abonné verrait un montant différent de celui qu'on lui a annoncé
+            sans aucun moyen de comprendre ce qui s'est passé. */}
+        {facture.motifRectification && (
+          <p className="mt-3 rounded-net border border-trait bg-ivoire px-3 py-2 text-sm text-ardoise">
+            <span className="font-medium text-nuit">
+              {facture.statut === "ANNULEE"
+                ? "Facture annulée par la société"
+                : "Facture rectifiée par la société"}
+            </span>
+            {facture.dateRectification && (
+              <span className="font-mono text-xs">
+                {" "}
+                le {formaterDateHeure(facture.dateRectification)}
+              </span>
+            )}{" "}
+            — {facture.motifRectification}
+          </p>
+        )}
+
         {regles.length > 0 && (
           <div className="mt-5 border-t border-trait pt-4">
             <p className="eyebrow mb-2">Règlements</p>

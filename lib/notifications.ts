@@ -1,5 +1,7 @@
 import { prisma } from "@/lib/prisma";
 import { libelleTypePanne, type Role } from "@/lib/constants";
+import { formaterMontant } from "@/lib/monnaie";
+import { restesAPayer } from "@/lib/facturation";
 
 /**
  * In-app alerts, derived from the data rather than stored.
@@ -44,22 +46,37 @@ async function notificationsClient(utilisateurId: string) {
   });
   if (!client) return [];
 
-  const recentes = await prisma.historique.findMany({
-    where: {
-      intervention: { clientId: client.id },
-      dateAction: { gte: new Date(Date.now() - 7 * JOUR) },
-      action: { not: "CREATION" },
-    },
-    orderBy: { dateAction: "desc" },
-    take: 8,
-    select: {
-      id: true,
-      action: true,
-      nouveauStatut: true,
-      dateAction: true,
-      intervention: { select: { id: true, typePanne: true } },
-    },
-  });
+  const [recentes, impayees] = await Promise.all([
+    prisma.historique.findMany({
+      where: {
+        intervention: { clientId: client.id },
+        dateAction: { gte: new Date(Date.now() - 7 * JOUR) },
+        action: { not: "CREATION" },
+      },
+      orderBy: { dateAction: "desc" },
+      take: 8,
+      select: {
+        id: true,
+        action: true,
+        nouveauStatut: true,
+        dateAction: true,
+        intervention: { select: { id: true, typePanne: true } },
+      },
+    }),
+    prisma.facture.findMany({
+      where: { statut: "A_PAYER", intervention: { clientId: client.id } },
+      orderBy: { dateEmission: "asc" },
+      select: {
+        id: true,
+        numero: true,
+        montantTotal: true,
+        dateEmission: true,
+        intervention: { select: { id: true, typePanne: true } },
+      },
+    }),
+  ]);
+
+  const soldes = await restesAPayer(prisma, impayees);
 
   const messages: Record<string, string> = {
     ACCEPTATION: "Un technicien a accepté votre demande",
@@ -70,14 +87,28 @@ async function notificationsClient(utilisateurId: string) {
     ANNULATION: "Votre demande a été annulée",
   };
 
-  return recentes.map((ligne) => ({
-    id: ligne.id,
-    titre: messages[ligne.action] ?? "Votre demande a évolué",
-    detail: libelleTypePanne(ligne.intervention.typePanne),
-    lien: `/client/suivi/${ligne.intervention.id}`,
-    date: ligne.dateAction,
-    ton: "info" as const,
-  }));
+  return [
+    // Une facture a regler passe avant l'avancement : c'est la seule ligne qui
+    // demande un geste a l'abonne, tout le reste ne fait que l'informer.
+    ...impayees.map((facture) => ({
+      id: `facture-${facture.id}`,
+      titre: `Facture ${facture.numero} à régler`,
+      detail: `${libelleTypePanne(facture.intervention.typePanne)} · ${formaterMontant(
+        soldes.get(facture.id) ?? facture.montantTotal,
+      )}`,
+      lien: `/client/suivi/${facture.intervention.id}`,
+      date: facture.dateEmission,
+      ton: "alerte" as const,
+    })),
+    ...recentes.map((ligne) => ({
+      id: ligne.id,
+      titre: messages[ligne.action] ?? "Votre demande a évolué",
+      detail: libelleTypePanne(ligne.intervention.typePanne),
+      lien: `/client/suivi/${ligne.intervention.id}`,
+      date: ligne.dateAction,
+      ton: "info" as const,
+    })),
+  ];
 }
 
 /**
@@ -91,7 +122,7 @@ async function notificationsTechnicien(utilisateurId: string) {
   });
   if (!technicien) return [];
 
-  const [disponibles, aDemarrer] = await Promise.all([
+  const [disponibles, aDemarrer, aEncaisser, enMain] = await Promise.all([
     prisma.intervention.findMany({
       where: { statut: "NOUVELLE", client: { zone: technicien.zone } },
       orderBy: { dateCreation: "desc" },
@@ -110,9 +141,68 @@ async function notificationsTechnicien(utilisateurId: string) {
       take: 4,
       select: { id: true, typePanne: true, dateCreation: true },
     }),
+    prisma.facture.findMany({
+      where: { statut: "A_PAYER", intervention: { technicienId: technicien.id } },
+      orderBy: { dateEmission: "asc" },
+      take: 5,
+      select: {
+        id: true,
+        numero: true,
+        montantTotal: true,
+        dateEmission: true,
+        intervention: {
+          select: { typePanne: true, client: { select: { ville: true } } },
+        },
+      },
+    }),
+    prisma.paiement.aggregate({
+      where: {
+        technicienId: technicien.id,
+        moyen: "ESPECES",
+        statut: "CONFIRME",
+        versementId: null,
+      },
+      _sum: { montant: true },
+      _max: { dateCreation: true },
+    }),
   ]);
 
-  return [
+  const especes = enMain._sum.montant ?? 0;
+
+  /*
+   * Les alertes d'argent ne passent pas par le tri chronologique.
+   *
+   * Des especes de la societe dans la poche d'un salarie ne sont pas un
+   * evenement, c'est un etat : plus il dure, plus il compte. Le trier par date
+   * l'enfoncerait sous les pannes du jour, c'est-a-dire exactement au moment ou
+   * il devient genant.
+   */
+  const argent = [
+    ...(especes > 0
+      ? [
+          {
+            id: "especes",
+            titre: "Espèces à remettre à la société",
+            detail: formaterMontant(especes),
+            lien: "/technicien/caisse",
+            date: enMain._max.dateCreation ?? new Date(),
+            ton: "alerte" as const,
+          },
+        ]
+      : []),
+    ...aEncaisser.map((f) => ({
+      id: `facture-${f.id}`,
+      titre: "Facture non réglée sur une de vos interventions",
+      detail: `${f.numero} · ${libelleTypePanne(f.intervention.typePanne)} · ${
+        f.intervention.client.ville
+      }`,
+      lien: "/technicien/caisse",
+      date: f.dateEmission,
+      ton: "info" as const,
+    })),
+  ];
+
+  const terrain = [
     ...disponibles.map((i) => ({
       id: `dispo-${i.id}`,
       titre: "Nouvelle panne disponible",
@@ -130,12 +220,21 @@ async function notificationsTechnicien(utilisateurId: string) {
       ton: "alerte" as const,
     })),
   ].sort((a, b) => b.date.getTime() - a.date.getTime());
+
+  return [...argent, ...terrain];
 }
 
 /** Le superviseur voit ce qui stagne, ce qui manque et ce qui attend. */
 async function notificationsSuperviseur() {
-  const [enAttente, indisponibles, aValider, zonesCouvertes, zonesAbonnes] =
-    await Promise.all([
+  const [
+    enAttente,
+    indisponibles,
+    aValider,
+    zonesCouvertes,
+    zonesAbonnes,
+    remises,
+    virements,
+  ] = await Promise.all([
       prisma.intervention.findMany({
         where: {
           statut: "NOUVELLE",
@@ -182,6 +281,36 @@ async function notificationsSuperviseur() {
       }),
       // Zones ou vit au moins un abonne.
       prisma.client.findMany({ select: { zone: true }, distinct: ["zone"] }),
+      // Remises d'especes declarees, en attente d'accuse de reception.
+      prisma.versement.findMany({
+        where: { statut: "EN_ATTENTE" },
+        orderBy: { dateCreation: "asc" },
+        take: 6,
+        select: {
+          id: true,
+          montant: true,
+          dateCreation: true,
+          technicien: {
+            select: {
+              matricule: true,
+              utilisateur: { select: { nom: true, prenom: true } },
+            },
+          },
+        },
+      }),
+      // Virements annonces, a pointer sur le releve bancaire.
+      prisma.paiement.findMany({
+        where: { statut: "EN_ATTENTE", moyen: "VIREMENT" },
+        orderBy: { dateCreation: "asc" },
+        take: 6,
+        select: {
+          id: true,
+          reference: true,
+          montant: true,
+          dateCreation: true,
+          facture: { select: { numero: true } },
+        },
+      }),
     ]);
 
   const couvertes = new Set(zonesCouvertes.map((t) => t.zone));
@@ -199,6 +328,26 @@ async function notificationsSuperviseur() {
       lien: "/superviseur/techniciens",
       date: new Date(),
       ton: "alerte" as const,
+    })),
+    // Un mouvement d'argent qui attend une signature bloque deux comptabilites
+    // a la fois : celle de la societe et celle du technicien.
+    ...remises.map((v) => ({
+      id: `remise-${v.id}`,
+      titre: "Remise d’espèces à confirmer",
+      detail: `${v.technicien.utilisateur.prenom} ${v.technicien.utilisateur.nom}${
+        v.technicien.matricule ? ` · ${v.technicien.matricule}` : ""
+      } · ${formaterMontant(v.montant)}`,
+      lien: "/superviseur/finances",
+      date: v.dateCreation,
+      ton: "alerte" as const,
+    })),
+    ...virements.map((p) => ({
+      id: `virement-${p.id}`,
+      titre: "Virement annoncé, à pointer sur le relevé",
+      detail: `${p.reference} · facture ${p.facture.numero} · ${formaterMontant(p.montant)}`,
+      lien: "/superviseur/finances",
+      date: p.dateCreation,
+      ton: "info" as const,
     })),
     ...aValider.map((t) => ({
       id: `valider-${t.id}`,

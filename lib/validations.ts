@@ -155,6 +155,32 @@ export const versementSchema = z.object({
   commentaire: z.string().trim().max(300).optional(),
 });
 
+/**
+ * Motif d'une rectification de facture.
+ *
+ * Obligatoire et un peu long : « erreur » ne dit rien a qui relira la facture
+ * dans six mois, et c'est l'abonne qui le lira en premier.
+ */
+const motifRectification = z
+  .string()
+  .trim()
+  .min(10, "Expliquez la rectification en 10 caractères minimum.")
+  .max(300, "Le motif ne peut pas dépasser 300 caractères.");
+
+/** Correction des lignes d'une facture non reglee, par le superviseur. */
+export const correctionFactureSchema = z.object({
+  motif: motifRectification,
+  lignes: z
+    .array(pieceFactureeSchema)
+    .min(1, "Une facture garde au moins une ligne.")
+    .max(12, "Douze lignes au maximum sur une même facture."),
+});
+
+/** Annulation d'une facture qui n'aurait pas du etre emise. */
+export const annulationFactureSchema = z.object({
+  motif: motifRectification,
+});
+
 /** Notation d'une intervention terminee par le client. */
 export const notationSchema = z.object({
   note: z

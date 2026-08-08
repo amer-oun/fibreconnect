@@ -67,6 +67,7 @@ Projet de fin d'études (stage BTP).
 /superviseur/dashboard          statistiques, graphiques, couverture des zones
 /superviseur/interventions      affectation, réaffectation, annulation
 /superviseur/finances           encaissements, remises à confirmer, paie
+/superviseur/factures/[id]      fiche facture : corriger ou annuler
 /superviseur/techniciens        équipe par zone, validation, activation
 /superviseur/techniciens/nouveau  création d'un compte technicien
 /superviseur/techniciens/[id]   fiche, validation, changement de zone, journal
@@ -204,6 +205,9 @@ erDiagram
         string   statut "A_PAYER|PAYEE|ANNULEE"
         datetime dateEmission
         datetime datePaiement "nullable"
+        string   motifRectification "nullable - lu par l abonne"
+        datetime dateRectification "nullable"
+        string   rectifieePar "nullable - id superviseur"
     }
 
     LigneFacture {
@@ -341,6 +345,32 @@ moment de rédiger son rapport.
 | Nouvelle installation | 250,000 DT |
 | Changement de routeur | 100,000 DT |
 | Autre | 70,000 DT |
+
+### Corriger une facture erronée
+
+Un technicien qui tape 2100 DT au lieu de 210 DT crée une dette que l'abonné ne
+peut pas contester et que personne ne peut réparer. Ce n'est pas un état
+acceptable pour une application qui imprime des montants. Le superviseur
+dispose donc de deux gestes, depuis `/superviseur/factures/[id]` :
+
+| Geste | Effet | Quand |
+|---|---|---|
+| **Corriger** | Les lignes sont remplacées, le total recalculé | Erreur de montant ou de désignation |
+| **Annuler** | L'abonné ne doit plus rien, la facture sort du chiffre d'affaires | Garantie, geste commercial — « rien à facturer » |
+
+Les deux **refusent dès qu'un règlement a été confirmé, même partiellement** :
+déplacer le total sous les pieds de quelqu'un qui a déjà payé une moitié produit
+un chiffre qu'aucune des deux parties ne peut rapprocher. Ce cas-là demande un
+avoir, que cette version ne gère pas.
+
+Les deux **exigent un motif d'au moins dix caractères**, stocké sur la facture
+et **affiché sur l'exemplaire de l'abonné**, à côté du nouveau montant. Un
+montant qui change sans que personne sache pourquoi est indéfendable devant
+l'abonné comme devant le technicien qui a établi la facture. « Erreur » ne dit
+rien à qui relira la facture dans six mois.
+
+L'annulation est **définitive** : l'intervention n'en recevra pas de nouvelle,
+la relation étant un-à-un.
 
 ### Les montants sont des entiers de millimes
 
@@ -583,10 +613,13 @@ celui qui prétend l'avoir envoyé.
 14. Le montant d'une remise n'est jamais envoyé par le client : il est calculé
     côté serveur à partir des encaissements non encore versés. Un champ libre
     permettrait de déclarer 200 DT en en gardant 400.
+15. Une facture peut être **corrigée ou annulée par le superviseur tant qu'aucun
+    règlement n'a été confirmé**, avec un motif obligatoire que l'abonné lit sur
+    son exemplaire. Après un règlement, même partiel, elle est figée.
 
 ### Ces règles sont testées
 
-`npm test` exécute 71 tests.
+`npm test` exécute 77 tests.
 
 Les 25 premiers portent sur les règles métier et tournent contre une base
 SQLite jetable, construite à partir des vraies migrations : cycle complet des
@@ -613,7 +646,7 @@ dépend jamais de la vitesse de la machine.
 comptée deux fois en parcourant toutes les pages, qu'une URL bricolée à la main
 retombe sur une page valide, et que les liens de page conservent les filtres.
 
-Les 21 derniers portent sur l'argent, et vérifient qu'on ne peut ni en créer ni
+Les 27 derniers portent sur l'argent, et vérifient qu'on ne peut ni en créer ni
 en perdre par les chemins que l'application propose :
 
 - une confirmation de paiement **rejouée trois fois** ne compte l'encaissement
@@ -625,7 +658,9 @@ en perdre par les chemins que l'application propose :
   `EN_COURS` — jamais de travaux sans facture ;
 - un total de facture est **exactement** la somme des lignes affichées ;
 - une remise déclarée deux fois est refusée, un accusé de réception donné deux
-  fois aussi.
+  fois aussi ;
+- une facture ne se corrige ni ne s'annule dès qu'un règlement est confirmé, et
+  une facture annulée sort du chiffre d'affaires.
 
 ### Traçabilité
 
@@ -905,11 +940,13 @@ Flouci demande un contrat commercial signé. Le découpage en deux temps
 précisément celui qu'attendent ces prestataires : la confirmation viendrait
 d'un webhook au lieu d'un bouton.
 
-**Une facture émise n'est pas modifiable, et pas annulable depuis l'interface.**
-Le statut `ANNULEE` existe en base et est traité partout dans les calculs, mais
-aucun écran ne le déclenche encore. Une facture erronée se corrige aujourd'hui
-en base. Le geste juste — un avoir, qui laisse la facture d'origine intacte —
-demande une table de plus.
+**Une facture déjà réglée ne se corrige pas.** Le superviseur peut corriger ou
+annuler une facture tant qu'aucun règlement n'a été confirmé, mais après un
+encaissement — même partiel — elle est figée. Le geste juste serait alors un
+**avoir**, qui laisse la facture d'origine intacte et lui oppose un document de
+sens contraire. Il demande une table de plus et, surtout, de renoncer à la
+relation un-à-un entre intervention et facture, puisqu'il faudrait pouvoir en
+réémettre une. C'est un choix de modélisation, pas un oubli.
 
 **La paie est un calcul, pas un versement.** Le tableau montre ce que la société
 doit à chaque technicien pour le mois ; rien n'enregistre qu'elle l'a payé. Il
