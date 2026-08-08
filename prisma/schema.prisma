@@ -134,9 +134,27 @@ model BulletinPaie {
   versePar      String // id du superviseur
   commentaire   String?
 
+  /// `true` tant que le bulletin fait foi, `null` une fois annule. Jamais false.
+  ///
+  /// Cette colonne n'existe que pour la contrainte d'unicite ci-dessous. Un
+  /// bulletin annule doit liberer son mois — c'est tout l'interet de
+  /// l'annulation — sans pour autant effacer la trace de ce qui a ete
+  /// enregistre par erreur.
+  ///
+  /// SQL considere deux NULL comme distincts dans un index unique. Les
+  /// bulletins annules portent donc `null` et peuvent s'empiler autant de fois
+  /// qu'il le faut, tandis que les bulletins en vigueur portent tous `true` et
+  /// restent uniques par (technicien, mois). C'est la facon standard d'ecrire
+  /// « unique parmi les lignes actives » quand le moteur ne propose pas
+  /// d'index partiel, ce qui est le cas de Prisma.
+  actif           Boolean?  @default(true)
+  motifAnnulation String?
+  dateAnnulation  DateTime?
+  annulePar       String? // id du superviseur
+
   technicien Technicien @relation(fields: [technicienId], references: [id], onDelete: Cascade)
 
-  @@unique([technicienId, mois])
+  @@unique([technicienId, mois, actif])
   @@index([mois])
 }
 
@@ -184,7 +202,18 @@ model Facture {
   // Reference lisible et citable au telephone : FC-2026-0007.
   numero         String @unique
 
-  montantTotal Int // somme des lignes, figee a l'emission
+  // Decomposition figee a l'emission. Le taux de TVA et le droit de timbre
+  // sont recopies ici et non lus dans lib/constants.ts au moment de
+  // l'affichage : ils changent par decision budgetaire, et une facture de l'an
+  // dernier doit continuer a se relire avec les taux de l'an dernier. Une
+  // facture ancienne dont le total se recalculerait au taux du jour ne
+  // correspondrait plus a ce que l'abonne a paye.
+  montantHT    Int // somme des lignes, toutes hors taxes
+  tauxTva      Float
+  montantTva   Int
+  timbreFiscal Int
+  montantTotal Int // toutes taxes comprises : c'est ce que l'abonne doit
+
   statut       String   @default("A_PAYER") // A_PAYER | PAYEE | ANNULEE
   dateEmission DateTime @default(now())
   datePaiement DateTime? // renseignee quand le solde atteint le total
@@ -211,7 +240,7 @@ model LigneFacture {
   id          String @id @default(cuid())
   factureId   String
   designation String
-  montant     Int // en millimes
+  montant     Int // en millimes, HORS TAXES
 
   facture Facture @relation(fields: [factureId], references: [id], onDelete: Cascade)
 

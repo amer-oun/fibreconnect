@@ -15,6 +15,7 @@ import {
   BCRYPT_ROUNDS,
   TYPE_PANNE_LABELS,
   tarifDe,
+  totauxFacture,
   type MoyenPaiement,
   type Priorite,
   type Statut,
@@ -905,7 +906,8 @@ async function main() {
       },
       ...(piece ? [piece] : []),
     ];
-    const montantTotal = lignes.reduce((s, l) => s + l.montant, 0);
+    // Mêmes totaux que ceux qu'aurait produits une clôture dans l'application.
+    const totaux = totauxFacture(lignes);
 
     // Les trois dernieres factures restent impayees : sans elles, la
     // demonstration n'aurait rien a payer ni rien a encaisser.
@@ -924,7 +926,7 @@ async function main() {
       data: {
         interventionId: intervention.id,
         numero: numeroSuivant("FC", dateFin),
-        montantTotal,
+        ...totaux,
         statut: soldee ? "PAYEE" : "A_PAYER",
         dateEmission: dateFin,
         datePaiement: soldee ? datePaiement : null,
@@ -942,7 +944,7 @@ async function main() {
     const paiement = await prisma.paiement.create({
       data: {
         factureId: facture.id,
-        montant: montantTotal,
+        montant: totaux.montantTotal,
         moyen,
         statut: enAttente ? "EN_ATTENTE" : "CONFIRME",
         reference,
@@ -956,7 +958,7 @@ async function main() {
 
     if (especes && intervention.technicienId) {
       const liste = especesParTechnicien.get(intervention.technicienId) ?? [];
-      liste.push({ id: paiement.id, date: datePaiement, montant: montantTotal });
+      liste.push({ id: paiement.id, date: datePaiement, montant: totaux.montantTotal });
       especesParTechnicien.set(intervention.technicienId, liste);
     }
   }
@@ -1061,11 +1063,11 @@ async function main() {
           dateFin: { gte: moisPrecedent, lte: finMoisPrecedent },
         },
       },
-      select: { montantTotal: true },
+      select: { montantHT: true },
     });
 
     const chiffreAffaires = facturesDuMois.reduce(
-      (s, f) => s + f.montantTotal,
+      (s, f) => s + f.montantHT,
       0,
     );
     const commission = Math.round(chiffreAffaires * technicien.tauxCommission);

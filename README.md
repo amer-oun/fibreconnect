@@ -204,7 +204,11 @@ erDiagram
         string   id PK
         string   interventionId FK "unique"
         string   numero UK "FC-2026-0007"
-        int      montantTotal "millimes"
+        int      montantHT "millimes - somme des lignes"
+        float    tauxTva "fige a l emission"
+        int      montantTva "millimes"
+        int      timbreFiscal "millimes - fige"
+        int      montantTotal "millimes TTC - ce que l abonne doit"
         string   statut "A_PAYER|PAYEE|ANNULEE"
         datetime dateEmission
         datetime datePaiement "nullable"
@@ -217,7 +221,7 @@ erDiagram
         string id PK
         string factureId FK
         string designation
-        int    montant "millimes"
+        int    montant "millimes HORS TAXES"
     }
 
     Paiement {
@@ -247,7 +251,8 @@ erDiagram
     BulletinPaie {
         string   id PK
         string   technicienId FK
-        string   mois "2026-08 - unique avec technicienId"
+        string   mois "2026-08"
+        boolean  actif "true ou null - unique avec technicienId et mois"
         int      salaireBase "millimes - fige"
         float    tauxCommission "fige"
         int      interventions "fige"
@@ -423,7 +428,7 @@ qui a été annoncé à l'abonné quand il a déclaré sa panne, pas découvert 
 fin. Le technicien ajoute ensuite les pièces remplacées, une par ligne, au
 moment de rédiger son rapport.
 
-| Type de panne | Tarif |
+| Type de panne | Tarif HT |
 |---|---|
 | Coupure totale | 80,000 DT |
 | Débit faible | 60,000 DT |
@@ -432,6 +437,44 @@ moment de rédiger son rapport.
 | Nouvelle installation | 250,000 DT |
 | Changement de routeur | 100,000 DT |
 | Autre | 70,000 DT |
+
+### TVA et droit de timbre
+
+**Toutes les lignes de facture sont hors taxes.** Le pied de facture ajoute la
+TVA (19 %, taux des prestations de service) puis le droit de timbre (1,000 DT,
+montant fixe par facture). `Facture.montantTotal` est le **TTC** : c'est ce que
+l'abonné doit, et donc ce que les règlements soldent.
+
+| | |
+|---|---|
+| Déplacement — Coupure totale | 80,000 DT |
+| **Total hors taxes** | 80,000 DT |
+| TVA 19 % | 15,200 DT |
+| Droit de timbre | 1,000 DT |
+| **Total toutes taxes comprises** | **96,200 DT** |
+
+Le taux et le timbre sont **recopiés sur chaque facture à son émission**, jamais
+relus dans `lib/constants.ts` au moment de l'affichage. Un taux de TVA change
+par décision budgétaire ; une facture de l'an dernier dont le total se
+recalculerait au taux du jour ne correspondrait plus à ce que l'abonné a payé.
+C'est le même raisonnement que pour le bulletin de paie, qui fige les siens.
+
+**La commission du technicien porte sur le hors-taxes.** La TVA et le timbre
+sont encaissés pour le compte de l'État : ils transitent par la société sans
+jamais lui appartenir. Commissionner dessus reviendrait à payer le technicien
+sur de l'argent que l'entreprise doit reverser. Pour la même raison, le tableau
+de bord affiche un « chiffre d'affaires » hors taxes et la page Finances
+distingue le facturé TTC de la TVA à reverser.
+
+Une seule fonction calcule ces quatre montants — `totauxFacture` dans
+[lib/constants.ts](lib/constants.ts) — utilisée par l'émission, la correction,
+le seed et l'aperçu que voit le technicien avant de clôturer. Deux
+implémentations arrondissant différemment produiraient un total que personne ne
+saurait reproduire, et le seul endroit où cela se verrait est l'exemplaire de
+l'abonné. Elle vit dans `constants.ts` et non dans `facturation.ts` parce que le
+formulaire de clôture est un composant client : importer un module qui parle à
+Prisma pour additionner trois nombres embarquerait le client de base de données
+dans le navigateur.
 
 ### Le document
 
@@ -453,13 +496,17 @@ Le superviseur relit **exactement le même document** sur
 finiraient par diverger, et celui qui tiendrait le mauvais aurait raison de s'en
 méfier.
 
-> **Ce document n'est pas une facture fiscale, et il le dit.** Une facture
-> tunisienne porte un matricule fiscal et de la TVA. Inventer un matricule
-> plausible produirait un papier capable de passer pour un document officiel —
-> exactement la ligne que ce projet trace déjà en refusant de simuler une page
-> bancaire crédible. Les mentions manquantes sont signalées en pied de page, et
-> `mentionsCompletes` dans [lib/societe.ts](lib/societe.ts) fait disparaître la
-> note le jour où les vraies informations sont renseignées.
+> **Ce document n'est pas une pièce fiscale, et il le dit.** Le matricule
+> fiscal imprimé est `0000000/A/M/000` : un numéro **tout à zéro**, qui ne peut
+> pas entrer en collision avec celui d'une société réelle et se lit comme un
+> exemple au premier coup d'œil, tout en montrant où la mention se place sur la
+> page. En inventer un plausible produirait un papier capable de passer pour un
+> document officiel — exactement la ligne que ce projet trace déjà en refusant
+> de simuler une page bancaire crédible.
+>
+> Le jour où les vraies informations sont connues : remplacer `matriculeFiscal`
+> et passer `mentionsReelles` à `true` dans [lib/societe.ts](lib/societe.ts). La
+> note de bas de page disparaît d'elle-même.
 
 ### Corriger une facture erronée
 
@@ -536,12 +583,25 @@ bouge pas : on ne réécrit pas un salaire qui a été payé. Le gel porte sur l
 avec un total figé donnerait une ligne où le fixe plus la commission ne font pas
 le total, et un tableau qui ne s'additionne pas est pire qu'un tableau périmé.
 
-L'enregistrement est **définitif**, comme l'accusé de réception d'une remise
-d'espèces : il atteste que de l'argent a changé de main hors de l'application.
+L'enregistrement atteste que de l'argent a changé de main hors de l'application.
 Ce qui rend ce geste sûr, c'est qu'il n'est jamais un simple clic dans un
 tableau — le bouton ouvre un panneau qui nomme le technicien, le mois et le
 montant, et redemande confirmation. Cinq lignes d'un tableau se ressemblent, et
 le bouton qui paie Karim est à deux centimètres de celui qui paie Sonia.
+
+**Un bulletin enregistré par erreur s'annule, avec un motif.** Il n'est pas
+supprimé : il garde ses montants, sa date et son auteur, et reçoit la raison de
+son retrait, affichée sous le tableau de paie. Effacer la ligne ne laisserait
+aucune trace d'un mois un jour déclaré payé — la première chose que chercherait
+qui relit les comptes.
+
+L'annulation doit pourtant **libérer le mois**, sinon elle ne répare rien. La
+contrainte d'unicité porte donc sur `(technicien, mois, actif)` où `actif` vaut
+`true` ou `null`, jamais `false` : **SQL considère deux `NULL` comme distincts
+dans un index unique**, si bien que les bulletins annulés s'empilent librement
+sur un même mois tandis que les bulletins en vigueur restent uniques. C'est la
+façon standard d'écrire « unique parmi les lignes actives » quand le moteur ne
+permet pas d'index partiel, ce qui est le cas de Prisma.
 
 ---
 
@@ -576,9 +636,10 @@ L'application démarre sur <http://localhost:3000>.
 ```bash
 npm run build       # build de production
 npm start           # lancer le build de production
-npm test            # règles métier, limitation, pagination (50 tests)
+npm test            # règles métier, argent, délais, pagination (94 tests)
 npm run test:watch  # tests en continu pendant le développement
 npm run lint        # ESLint
+npm run sauvegarde  # instantané horodaté de la base, dans sauvegardes/
 npx tsc --noEmit    # vérification des types
 npx prisma studio   # explorateur de base de données
 npx prisma db seed  # réinitialiser le jeu de données
@@ -587,6 +648,14 @@ npx prisma db seed  # réinitialiser le jeu de données
 Le seed vide la base avant de la recréer : il est rejouable autant de fois que
 nécessaire, et son tirage aléatoire est déterministe (graine fixe), donc deux
 exécutions produisent exactement le même jeu de données.
+
+**La sauvegarde utilise `VACUUM INTO`, pas une copie de fichier.** Copier
+`dev.db` pendant que l'application tourne peut capturer un fichier déchiré :
+SQLite écrit ses pages au fil de l'eau, et une copie prise au milieu d'une
+transaction n'en contient que la moitié. `VACUUM INTO` demande à SQLite
+lui-même un instantané cohérent, ce qui reste sûr serveur allumé — et c'est le
+seul moment où quelqu'un pense à faire une sauvegarde. Les vingt dernières sont
+conservées, les plus anciennes s'effacent.
 
 ---
 
@@ -777,7 +846,11 @@ celui qui prétend l'avoir envoyé.
     étiquette de priorité, pour que la liste et les badges disent la même chose.
 18. La paie versée est **enregistrée**, pas seulement calculée. Un mois ne peut
     pas être payé deux fois (contrainte d'unicité en base), et les montants d'un
-    bulletin sont figés à l'enregistrement.
+    bulletin sont figés à l'enregistrement. Un bulletin annulé garde sa trace et
+    libère son mois.
+19. Les lignes de facture sont **hors taxes** ; la TVA et le droit de timbre
+    s'ajoutent au pied, avec un taux **figé sur la facture**. La commission du
+    technicien porte sur le hors-taxes : la TVA n'appartient pas à la société.
 
 ### Ces règles sont testées
 
@@ -808,7 +881,7 @@ dépend jamais de la vitesse de la machine.
 comptée deux fois en parcourant toutes les pages, qu'une URL bricolée à la main
 retombe sur une page valide, et que les liens de page conservent les filtres.
 
-29 portent sur l'argent, et vérifient qu'on ne peut ni en créer ni
+32 portent sur l’argent, et vérifient qu'on ne peut ni en créer ni
 en perdre par les chemins que l'application propose :
 
 - une confirmation de paiement **rejouée trois fois** ne compte l'encaissement
@@ -825,7 +898,13 @@ en perdre par les chemins que l'application propose :
   une facture annulée sort du chiffre d'affaires ;
 - un mois de paie ne se verse pas deux fois, et une facture corrigée après le
   versement ne réécrit **aucun** des chiffres du bulletin — la ligne figée
-  continue de s'additionner.
+  continue de s'additionner ;
+- annuler un bulletin conserve ses montants, sa date et son motif, **et libère
+  le mois** : la paie peut être enregistrée à nouveau, ce qui vérifie du même
+  coup que l'astuce des `NULL` distincts fonctionne vraiment ;
+- une facture porte son propre taux de TVA et son propre timbre, et son total
+  TTC est toujours la somme du hors-taxes, de la TVA et du timbre — y compris
+  après une correction.
 
 Les 12 restants portent sur les délais et sur les deux formats que les exports
 utilisent. Tous sont des **fonctions pures** auxquelles l'instant courant est
@@ -875,6 +954,8 @@ lib/
   facturation.ts           émission, solde, encaissement, remises, paie
   monnaie.ts               montants en millimes, jamais en décimaux
   societe.ts               identité imprimée en tête de facture
+scripts/
+  sauvegarde.ts            instantané SQLite cohérent (VACUUM INTO)
   validations.ts           schémas zod
   session.ts               exigerRole(), utilisateurConnecte()
   api.ts                   réponses et gestion d'erreurs communes
@@ -1092,12 +1173,13 @@ comme Leaflet écrivent des attributs `style`. Les supprimer demande de génére
 un *nonce* par requête et de le faire traverser le framework — un travail réel,
 à refaire à chaque montée de version.
 
-**Deux listes restent non paginées.** La carte des abonnés
-(`/superviseur/clients`) charge tout, parce qu'une carte paginée n'aurait pas
-de sens. Et l'historique du technicien calcule ses moyennes sur l'ensemble de
-ses interventions terminées : la liste affichée est paginée, mais le calcul de
-la durée moyenne lit encore toutes les lignes — SQLite ne sait pas faire la
-moyenne d'une différence de dates sans SQL brut.
+**Deux calculs lisent encore toutes les lignes.** La carte des abonnés charge
+tous les points, ce qui est voulu — une carte paginée n'aurait pas de sens, on y
+cherche justement ce qui est loin du reste ; la *liste* sous la carte, elle, est
+paginée. Et l'historique du technicien calcule ses moyennes sur l'ensemble de
+ses interventions terminées : la liste affichée est paginée, mais la durée
+moyenne lit encore toutes les lignes — SQLite ne sait pas faire la moyenne d'une
+différence de dates sans SQL brut.
 
 **`notFound()` renvoie 200 au lieu de 404.** Comportement de Next 16 en rendu
 par flux : la réponse a déjà commencé à partir quand la page appelle
@@ -1123,14 +1205,8 @@ sens contraire. Il demande une table de plus et, surtout, de renoncer à la
 relation un-à-un entre intervention et facture, puisqu'il faudrait pouvoir en
 réémettre une. C'est un choix de modélisation, pas un oubli.
 
-**Aucune TVA, aucun matricule fiscal.** Les montants sont des totaux nets et le
-document le dit en pied de page. Les ajouter n'est pas qu'un champ de plus : il
-faut un taux par ligne, un sous-total hors taxe, et le choix de ce qui est
-assujetti — une question comptable, pas technique.
-
-**Un bulletin de paie ne s'annule pas.** L'enregistrement du versement est
-définitif, comme l'accusé de réception d'une remise d'espèces. Une erreur de
-saisie se corrige aujourd'hui en base. L'ajouter proprement demanderait le même
-mécanisme que la rectification de facture — motif, trace, auteur — et la
-question de savoir ce que devient la contrainte d'unicité une fois le bulletin
-annulé.
+**Un seul taux de TVA, appliqué à toute la facture.** Les 19 % valent pour
+l'ensemble des lignes. Une pièce détachée relevant d'un taux différent
+demanderait un taux **par ligne** et des sous-totaux par taux — un changement de
+modèle, et surtout une question comptable : savoir ce qui est assujetti à quoi
+n'est pas une décision technique.

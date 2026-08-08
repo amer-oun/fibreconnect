@@ -334,13 +334,16 @@ export const TYPE_PANNE_LABELS: Record<TypePanne, string> = {
 /* -------------------------------------------------------------------------- */
 
 /**
- * Prix de base d'une intervention, par type de panne, **en millimes**
- * (voir lib/monnaie.ts : 1 DT = 1000 millimes).
+ * Prix de base d'une intervention, par type de panne, **hors taxes et en
+ * millimes** (voir lib/monnaie.ts : 1 DT = 1000 millimes).
  *
  * Le tarif est annoncé au client au moment où il déclare sa panne, pas
  * découvert à la fin : c'est la seule façon honnête de facturer un
  * déplacement. Le technicien peut ajouter les pièces qu'il a remplacées à la
  * clôture, chacune sur sa propre ligne de facture.
+ *
+ * Toutes les lignes de facture sont hors taxes ; la TVA et le droit de timbre
+ * s'ajoutent au pied de la facture (voir `TVA_TAUX` et `TIMBRE_FISCAL`).
  */
 export const TARIFS: Record<TypePanne, number> = {
   COUPURE_TOTALE: 80_000,
@@ -354,6 +357,59 @@ export const TARIFS: Record<TypePanne, number> = {
 
 export function tarifDe(typePanne: string): number {
   return estTypePanne(typePanne) ? TARIFS[typePanne] : TARIFS.AUTRE;
+}
+
+/* -------------------------------------------------------------------------- */
+/* Taxes                                                                      */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * Taux de TVA applicable aux prestations de service en Tunisie.
+ *
+ * Il est **recopié sur chaque facture à son émission** plutôt que lu ici au
+ * moment de l'affichage : un taux de TVA change par décision budgétaire, et une
+ * facture de l'an dernier doit continuer à se relire avec le taux de l'an
+ * dernier. Une facture ancienne dont le total se recalculerait au taux du jour
+ * ne correspondrait plus à ce que l'abonné a payé.
+ */
+export const TVA_TAUX = 0.19;
+
+/**
+ * Droit de timbre, en millimes : 1,000 DT par facture.
+ *
+ * Montant fixe et non proportionnel — il ne dépend ni du montant facturé ni du
+ * nombre de lignes. Figé lui aussi sur la facture, pour la même raison que le
+ * taux de TVA.
+ */
+export const TIMBRE_FISCAL = 1_000;
+
+/**
+ * Turns invoice lines into the four figures printed at the bottom of one.
+ *
+ * One function for the whole application — issuing an invoice, correcting one,
+ * seeding the demo data, and the preview the technician sees before closing.
+ * Two of them rounding differently would produce a total nobody could
+ * reproduce, and the one place it would show is the customer's copy.
+ *
+ * Lives here, next to the rates, rather than in lib/facturation.ts: the
+ * technician's closing form is a client component, and pulling in a module
+ * that talks to Prisma to add up three numbers would drag the database client
+ * into the browser bundle.
+ *
+ * The rate and the stamp duty are read once here and then **copied onto the
+ * invoice**, never looked up again at display time.
+ */
+export function totauxFacture(lignes: ReadonlyArray<{ montant: number }>) {
+  const montantHT = lignes.reduce((somme, l) => somme + l.montant, 0);
+  const montantTva = Math.round(montantHT * TVA_TAUX);
+
+  return {
+    montantHT,
+    tauxTva: TVA_TAUX,
+    montantTva,
+    timbreFiscal: TIMBRE_FISCAL,
+    montantTotal: montantHT + montantTva + TIMBRE_FISCAL,
+  };
 }
 
 /* -------------------------------------------------------------------------- */

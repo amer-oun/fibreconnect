@@ -152,11 +152,13 @@ export default async function TableauDeBordSuperviseur({
 
       {/* Argent ---------------------------------------------------------- */}
       <div className="mb-8 grid grid-cols-2 gap-6 lg:grid-cols-4">
+        {/* Le chiffre d'affaires est le HORS TAXES : la TVA transite par la
+            société sans lui appartenir, l'inclure gonflerait ce qu'elle gagne. */}
         <Indicateur
-          libelle="Facturé"
-          valeur={formaterMontantCourt(bilan.facture)}
+          libelle="Chiffre d’affaires"
+          valeur={formaterMontantCourt(bilan.chiffreAffairesHT)}
           accent={ACCENTS.neutre}
-          precision={`${bilan.nombreFactures} facture${bilan.nombreFactures > 1 ? "s" : ""}`}
+          precision={`hors taxes · ${bilan.nombreFactures} facture${bilan.nombreFactures > 1 ? "s" : ""}`}
         />
         <Indicateur
           libelle="Encaissé"

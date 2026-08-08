@@ -11,7 +11,15 @@ import {
   libelleDuMois,
   moisDecale,
 } from "@/lib/dates";
-import { bilanFinancier, paieDuMois, restesAPayer } from "@/lib/facturation";
+import {
+  bilanFinancier,
+  bulletinsAnnules,
+  paieDuMois,
+  restesAPayer,
+} from "@/lib/facturation";
+import { calculerPagination, lirePage } from "@/lib/pagination";
+import type { ParametresRecherche } from "@/lib/filtres";
+import Pagination from "@/components/ui/pagination";
 import {
   EntetePage,
   EtatVide,
@@ -38,17 +46,27 @@ export const metadata: Metadata = { title: "Finances" };
 export default async function PageFinances({
   searchParams,
 }: {
-  searchParams: Promise<{ mois?: string }>;
+  searchParams: Promise<ParametresRecherche>;
 }) {
   await exigerRole("SUPERVISEUR");
+  const parametres = await searchParams;
 
   const {
     debut: debutDuMois,
     fin: finDuMois,
     cle: moisChoisi,
-  } = bornesDuMois((await searchParams).mois);
+  } = bornesDuMois(
+    typeof parametres.mois === "string" ? parametres.mois : undefined,
+  );
 
-  const [bilan, remises, virements, impayees, paie] = await Promise.all([
+  // Le registre des impayés grandit tant qu'une facture n'est pas réglée :
+  // c'est précisément la liste qu'il ne faut pas tronquer en silence.
+  const paginationImpayees = calculerPagination(
+    await prisma.facture.count({ where: { statut: "A_PAYER" } }),
+    lirePage(parametres),
+  );
+
+  const [bilan, remises, virements, impayees, paie, annules] = await Promise.all([
     bilanFinancier(),
     prisma.versement.findMany({
       where: { statut: "EN_ATTENTE" },
@@ -94,7 +112,8 @@ export default async function PageFinances({
     prisma.facture.findMany({
       where: { statut: "A_PAYER" },
       orderBy: { dateEmission: "asc" },
-      take: 30,
+      skip: paginationImpayees.skip,
+      take: paginationImpayees.take,
       select: {
         id: true,
         numero: true,
@@ -117,6 +136,7 @@ export default async function PageFinances({
       },
     }),
     paieDuMois(debutDuMois, finDuMois),
+    bulletinsAnnules(moisChoisi),
   ]);
 
   const soldes = await restesAPayer(prisma, impayees);
@@ -157,9 +177,9 @@ export default async function PageFinances({
 
       <div className="mb-8 grid gap-x-6 gap-y-5 sm:grid-cols-2 lg:grid-cols-4">
         <Indicateur
-          libelle="Facturé"
+          libelle="Facturé TTC"
           valeur={formaterMontant(bilan.facture)}
-          precision={`${bilan.nombreFactures} facture${bilan.nombreFactures > 1 ? "s" : ""} émise${bilan.nombreFactures > 1 ? "s" : ""}`}
+          precision={`dont ${formaterMontant(bilan.tvaCollectee)} de TVA à reverser`}
           accent={ACCENTS.neutre}
         />
         <Indicateur
@@ -284,7 +304,9 @@ export default async function PageFinances({
 
         {/* Factures impayees ------------------------------------------------ */}
         <Panneau>
-          <TitrePanneau>Factures non soldées — {impayees.length}</TitrePanneau>
+          <TitrePanneau>
+            Factures non soldées — {paginationImpayees.total}
+          </TitrePanneau>
 
           {impayees.length === 0 ? (
             <EtatVide
@@ -350,6 +372,16 @@ export default async function PageFinances({
               </table>
             </div>
           )}
+
+          {/* La pagination est dans le panneau, pas sous la page : trois listes
+              se suivent ici, et des liens de page flottant en bas ne diraient
+              pas laquelle ils font défiler. */}
+          <Pagination
+            chemin="/superviseur/finances"
+            parametres={parametres}
+            etat={paginationImpayees}
+            nom="factures"
+          />
         </Panneau>
 
         {/* Paie ------------------------------------------------------------- */}
@@ -453,8 +485,8 @@ export default async function PageFinances({
                         : "—"}
                     </td>
                     <td className="px-4 py-3 text-right">
-                      {ligne.bulletin ? (
-                        <span className="text-xs text-valide">
+                      {ligne.bulletin && (
+                        <span className="block text-xs text-valide">
                           Versée le{" "}
                           {formaterDateHeure(ligne.bulletin.dateVersement)}
                           {ligne.bulletin.commentaire && (
@@ -463,17 +495,17 @@ export default async function PageFinances({
                             </span>
                           )}
                         </span>
-                      ) : (
-                        <span className="sans-impression inline-flex justify-end">
-                          <VersementPaie
-                            technicienId={ligne.technicienId}
-                            nom={ligne.nom}
-                            mois={moisChoisi}
-                            libelleMois={libelleDuMois(debutDuMois)}
-                            montant={ligne.total}
-                          />
-                        </span>
                       )}
+                      <span className="sans-impression mt-1.5 inline-flex justify-end">
+                        <VersementPaie
+                          technicienId={ligne.technicienId}
+                          nom={ligne.nom}
+                          mois={moisChoisi}
+                          libelleMois={libelleDuMois(debutDuMois)}
+                          montant={ligne.total}
+                          bulletinId={ligne.bulletin?.id}
+                        />
+                      </span>
                     </td>
                   </tr>
                 ))}
@@ -495,6 +527,38 @@ export default async function PageFinances({
             L’enregistrement d’un versement fige ses montants : une facture du
             mois corrigée plus tard ne réécrit pas un salaire déjà payé.
           </p>
+
+          {/* Un versement annulé laisse sa ligne. Sans elle, un mois un jour
+              déclaré payé disparaîtrait sans laisser de trace — la première
+              chose que chercherait qui relit les comptes. */}
+          {annules.length > 0 && (
+            <div className="border-t border-trait px-4 py-3 sm:px-5">
+              <p className="eyebrow mb-2">Versements annulés</p>
+              <ul className="space-y-2 text-sm">
+                {annules.map((b) => (
+                  <li key={b.id} className="flex flex-wrap items-baseline gap-2">
+                    <span className="font-medium text-nuit">
+                      {b.technicien.utilisateur.prenom}{" "}
+                      {b.technicien.utilisateur.nom}
+                    </span>
+                    <span className="tabulaire text-ardoise line-through">
+                      {formaterMontant(b.montantTotal)}
+                    </span>
+                    <span className="font-mono text-xs text-brume">
+                      enregistré le {formaterDateHeure(b.dateVersement)}
+                      {b.dateAnnulation &&
+                        ` · annulé le ${formaterDateHeure(b.dateAnnulation)}`}
+                    </span>
+                    {b.motifAnnulation && (
+                      <span className="w-full text-xs text-ardoise">
+                        {b.motifAnnulation}
+                      </span>
+                    )}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
         </Panneau>
       </div>
     </div>

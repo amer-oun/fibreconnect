@@ -4,6 +4,7 @@ import { preparerBase, semerJeuDeTest, supprimerBase } from "./aide";
 import { prisma as client } from "@/lib/prisma";
 import { ErreurMetier, changerStatut, creerIntervention } from "@/lib/interventions";
 import {
+  annulerBulletinPaie,
   annulerFacture,
   bilanFinancier,
   confirmerPaiement,
@@ -19,8 +20,16 @@ import {
   resteAPayer,
   verserPaie,
 } from "@/lib/facturation";
-import { TARIFS } from "@/lib/constants";
+import {
+  TARIFS,
+  TIMBRE_FISCAL,
+  TVA_TAUX,
+  totauxFacture,
+} from "@/lib/constants";
 import { dinarsEnMillimes, formaterMontant, partDe } from "@/lib/monnaie";
+
+/** Le TTC correspondant à un hors-taxes, comme le calcule l'application. */
+const ttc = (ht: number) => totauxFacture([{ montant: ht }]).montantTotal;
 
 /**
  * Invoicing and settlement, against a real database.
@@ -106,10 +115,41 @@ describe("Émission de la facture", () => {
       include: { lignes: true },
     });
 
-    expect(facture.montantTotal).toBe(TARIFS.COUPURE_TOTALE);
+    expect(facture.montantHT).toBe(TARIFS.COUPURE_TOTALE);
     expect(facture.lignes).toHaveLength(1);
     expect(facture.lignes[0].designation).toContain("Coupure totale");
     expect(facture.statut).toBe("A_PAYER");
+  });
+
+  it("ajoute la TVA et le droit de timbre au hors-taxes", async () => {
+    const { factureId } = await interventionFacturee();
+    const facture = await prisma.facture.findUniqueOrThrow({
+      where: { id: factureId },
+    });
+
+    expect(facture.tauxTva).toBe(TVA_TAUX);
+    expect(facture.timbreFiscal).toBe(TIMBRE_FISCAL);
+    expect(facture.montantTva).toBe(partDe(facture.montantHT, TVA_TAUX));
+    // C'est le TTC que l'abonné doit, et donc celui que le règlement solde.
+    expect(facture.montantTotal).toBe(
+      facture.montantHT + facture.montantTva + facture.timbreFiscal,
+    );
+    expect(await resteAPayer(client, factureId)).toBe(facture.montantTotal);
+  });
+
+  it("fige le taux et le timbre sur la facture, sans les relire ensuite", async () => {
+    const { factureId } = await interventionFacturee();
+    const facture = await prisma.facture.findUniqueOrThrow({
+      where: { id: factureId },
+    });
+
+    // Un taux qui changerait par décision budgétaire ne doit pas réécrire les
+    // factures déjà émises : elles portent leur propre taux.
+    expect(facture).toHaveProperty("tauxTva");
+    expect(facture).toHaveProperty("timbreFiscal");
+    expect(facture.montantTotal).toBe(
+      facture.montantHT + partDe(facture.montantHT, facture.tauxTva) + facture.timbreFiscal,
+    );
   });
 
   it("ajoute les pièces sur leurs propres lignes et les additionne", async () => {
@@ -127,10 +167,10 @@ describe("Émission de la facture", () => {
     });
 
     expect(facture.lignes).toHaveLength(3);
-    expect(facture.montantTotal).toBe(TARIFS.ONT_DEFECTUEUX + 85_000 + 18_500);
-    // Le total est exactement la somme des lignes affichées : c'est toute la
-    // raison d'utiliser des entiers de millimes.
-    expect(facture.montantTotal).toBe(
+    // Le hors-taxes est exactement la somme des lignes affichées : c'est toute
+    // la raison d'utiliser des entiers de millimes.
+    expect(facture.montantHT).toBe(TARIFS.ONT_DEFECTUEUX + 85_000 + 18_500);
+    expect(facture.montantHT).toBe(
       facture.lignes.reduce((s, l) => s + l.montant, 0),
     );
   });
@@ -208,7 +248,7 @@ describe("Paiement en ligne", () => {
       where: { id: factureId },
     });
     expect(facture.statut).toBe("A_PAYER");
-    expect(await resteAPayer(client, factureId)).toBe(TARIFS.COUPURE_TOTALE);
+    expect(await resteAPayer(client, factureId)).toBe(ttc(TARIFS.COUPURE_TOTALE));
   });
 
   it("solde la facture à la confirmation", async () => {
@@ -249,7 +289,7 @@ describe("Paiement en ligne", () => {
     const paiement = await ouvrirPaiement({ factureId, moyen: "CARTE" });
     await echouerPaiement(paiement.reference);
 
-    expect(await resteAPayer(client, factureId)).toBe(TARIFS.COUPURE_TOTALE);
+    expect(await resteAPayer(client, factureId)).toBe(ttc(TARIFS.COUPURE_TOTALE));
     await expect(
       confirmerPaiement(paiement.reference),
     ).rejects.toBeInstanceOf(ErreurMetier);
@@ -274,7 +314,7 @@ describe("Espèces et dette du technicien", () => {
     await encaisserEspeces({
       factureId,
       technicienId: jeu.techA.id,
-      montant: TARIFS.COUPURE_TOTALE,
+      montant: ttc(TARIFS.COUPURE_TOTALE),
     });
 
     const facture = await prisma.facture.findUniqueOrThrow({
@@ -282,13 +322,13 @@ describe("Espèces et dette du technicien", () => {
     });
     expect(facture.statut).toBe("PAYEE");
     expect(await especesEnMain(jeu.techA.id)).toBe(
-      avant + TARIFS.COUPURE_TOTALE,
+      avant + ttc(TARIFS.COUPURE_TOTALE),
     );
   });
 
   it("accepte un paiement partiel sans solder la facture", async () => {
     const { factureId } = await interventionFacturee();
-    const moitie = TARIFS.COUPURE_TOTALE / 2;
+    const moitie = Math.round(ttc(TARIFS.COUPURE_TOTALE) / 2);
 
     await encaisserEspeces({
       factureId,
@@ -310,7 +350,7 @@ describe("Espèces et dette du technicien", () => {
       encaisserEspeces({
         factureId,
         technicienId: jeu.techA.id,
-        montant: TARIFS.COUPURE_TOTALE + 1,
+        montant: ttc(TARIFS.COUPURE_TOTALE) + 1,
       }),
     ).rejects.toBeInstanceOf(ErreurMetier);
   });
@@ -320,7 +360,7 @@ describe("Espèces et dette du technicien", () => {
     await encaisserEspeces({
       factureId,
       technicienId: jeu.techB.id,
-      montant: TARIFS.COUPURE_TOTALE,
+      montant: ttc(TARIFS.COUPURE_TOTALE),
     });
 
     const detenu = await especesEnMain(jeu.techB.id);
@@ -372,7 +412,7 @@ describe("Rectification d'une facture", () => {
     const avant = await prisma.facture.findUniqueOrThrow({
       where: { id: factureId },
     });
-    expect(avant.montantTotal).toBe(TARIFS.CHANGEMENT_ROUTEUR + 2_100_000);
+    expect(avant.montantHT).toBe(TARIFS.CHANGEMENT_ROUTEUR + 2_100_000);
 
     const apres = await corrigerFacture({
       factureId,
@@ -385,9 +425,15 @@ describe("Rectification d'une facture", () => {
     });
 
     expect(apres.lignes).toHaveLength(2);
-    expect(apres.montantTotal).toBe(TARIFS.CHANGEMENT_ROUTEUR + 210_000);
-    expect(apres.montantTotal).toBe(
+    expect(apres.montantHT).toBe(TARIFS.CHANGEMENT_ROUTEUR + 210_000);
+    expect(apres.montantHT).toBe(
       apres.lignes.reduce((s, l) => s + l.montant, 0),
+    );
+    // La correction recalcule aussi les taxes : un total corrigé qui garderait
+    // la TVA de l'ancien montant ne serait pas rapprochable.
+    expect(apres.montantTva).toBe(partDe(apres.montantHT, apres.tauxTva));
+    expect(apres.montantTotal).toBe(
+      apres.montantHT + apres.montantTva + apres.timbreFiscal,
     );
     expect(apres.motifRectification).toContain("2100 DT");
     expect(apres.rectifieePar).toBe(SUPERVISEUR);
@@ -436,7 +482,7 @@ describe("Rectification d'une facture", () => {
     await encaisserEspeces({
       factureId,
       technicienId: jeu.techA.id,
-      montant: Math.round(TARIFS.COUPURE_TOTALE / 2),
+      montant: Math.round(ttc(TARIFS.COUPURE_TOTALE) / 2),
     });
 
     // Deplacer le total sous les pieds de quelqu'un qui a deja paye une moitie
@@ -594,7 +640,7 @@ describe("Bilan et paie", () => {
     const facture = await prisma.facture.findUniqueOrThrow({
       where: { id: factureId },
     });
-    expect(facture.montantTotal).toBe(TARIFS.COUPURE_TOTALE + 500_000);
+    expect(facture.montantHT).toBe(TARIFS.COUPURE_TOTALE + 500_000);
 
     // …et la paie ne bouge pas : on ne réécrit pas un salaire déjà payé.
     const ligne = (await paieDuMois(debut, fin)).find(
@@ -607,6 +653,66 @@ describe("Bilan et paie", () => {
 
     // Le gel porte sur la ligne entière : elle continue de s'additionner.
     expect(ligne.salaireBase + ligne.commission).toBe(ligne.total);
+  });
+
+  it("annuler un bulletin libère le mois sans effacer la trace", async () => {
+    const maintenant = new Date();
+    const debut = new Date(maintenant.getFullYear(), maintenant.getMonth(), 1);
+    const fin = new Date(
+      maintenant.getFullYear(),
+      maintenant.getMonth() + 1,
+      0,
+      23,
+      59,
+      59,
+    );
+    const mois = `${maintenant.getFullYear()}-${String(maintenant.getMonth() + 1).padStart(2, "0")}`;
+
+    // Le technicien A a déjà été payé par un test précédent : on l'annule.
+    const bulletin = await prisma.bulletinPaie.findFirstOrThrow({
+      where: { technicienId: jeu.techA.id, mois, actif: true },
+    });
+
+    await annulerBulletinPaie({
+      bulletinId: bulletin.id,
+      superviseurId: "superviseur-de-test",
+      motif: "Enregistré sur le mauvais technicien.",
+    });
+
+    // La ligne reste, avec ses montants, sa date et son motif.
+    const trace = await prisma.bulletinPaie.findUniqueOrThrow({
+      where: { id: bulletin.id },
+    });
+    expect(trace.actif).toBeNull();
+    expect(trace.montantTotal).toBe(bulletin.montantTotal);
+    expect(trace.dateVersement).toEqual(bulletin.dateVersement);
+    expect(trace.motifAnnulation).toContain("mauvais technicien");
+    expect(trace.dateAnnulation).not.toBeNull();
+
+    // Le mois redevient « à verser »…
+    const ligne = (await paieDuMois(debut, fin)).find(
+      (l) => l.technicienId === jeu.techA.id,
+    )!;
+    expect(ligne.bulletin).toBeNull();
+
+    // …et peut être payé de nouveau : c'est tout l'intérêt de l'annulation.
+    // Deux bulletins annulés coexisteraient sur le même mois sans se heurter,
+    // parce que l'index unique ne retient que les lignes actives.
+    const rejoue = await verserPaie({
+      technicienId: jeu.techA.id,
+      mois,
+      superviseurId: "superviseur-de-test",
+    });
+    expect(rejoue.id).not.toBe(bulletin.id);
+
+    // Une annulation déjà faite ne se refait pas.
+    await expect(
+      annulerBulletinPaie({
+        bulletinId: bulletin.id,
+        superviseurId: "superviseur-de-test",
+        motif: "Deuxième tentative sur le même bulletin.",
+      }),
+    ).rejects.toBeInstanceOf(ErreurMetier);
   });
 
   it("commissionne le travail fait, payé ou non", async () => {

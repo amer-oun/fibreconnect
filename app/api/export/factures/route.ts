@@ -38,7 +38,11 @@ const ENTETES = [
   "Type de panne",
   "Technicien",
   "Matricule",
-  "Montant total",
+  "Montant HT",
+  "Taux TVA",
+  "TVA",
+  "Droit de timbre",
+  "Total TTC",
   "Réglé",
   "Reste dû",
   "Moyens de règlement",
@@ -64,6 +68,10 @@ export async function GET(requete: Request) {
       select: {
         id: true,
         numero: true,
+        montantHT: true,
+        tauxTva: true,
+        montantTva: true,
+        timbreFiscal: true,
         montantTotal: true,
         statut: true,
         dateEmission: true,
@@ -118,6 +126,11 @@ export async function GET(requete: Request) {
           ? `${technicien.utilisateur.prenom} ${technicien.utilisateur.nom}`
           : "",
         technicien?.matricule ?? "",
+        montantPourTableur(f.montantHT),
+        // En pourcentage plutôt qu'en 0,19 : c'est ainsi qu'un taux se relit.
+        `${Math.round(f.tauxTva * 100)} %`,
+        montantPourTableur(f.montantTva),
+        montantPourTableur(f.timbreFiscal),
         montantPourTableur(f.montantTotal),
         montantPourTableur(regle),
         montantPourTableur(

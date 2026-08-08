@@ -196,6 +196,11 @@ export const versementPaieSchema = z.object({
   commentaire: z.string().trim().max(300).optional(),
 });
 
+/** Annulation d'un bulletin enregistre par erreur. */
+export const annulationBulletinSchema = z.object({
+  motif: motifRectification,
+});
+
 /** Notation d'une intervention terminee par le client. */
 export const notationSchema = z.object({
   note: z

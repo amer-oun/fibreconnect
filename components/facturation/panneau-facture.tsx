@@ -60,9 +60,33 @@ export default function PanneauFacture({
             ))}
           </tbody>
           <tfoot>
+            <tr>
+              <th scope="row" className="pt-3 text-left font-medium text-ardoise">
+                Total hors taxes
+              </th>
+              <td className="pt-3 text-right text-nuit tabulaire">
+                {formaterMontant(facture.montantHT)}
+              </td>
+            </tr>
+            <tr>
+              <th scope="row" className="py-1 text-left font-medium text-ardoise">
+                TVA {Math.round(facture.tauxTva * 100)} %
+              </th>
+              <td className="py-1 text-right text-nuit tabulaire">
+                {formaterMontant(facture.montantTva)}
+              </td>
+            </tr>
+            <tr>
+              <th scope="row" className="pb-2 text-left font-medium text-ardoise">
+                Droit de timbre
+              </th>
+              <td className="pb-2 text-right text-nuit tabulaire">
+                {formaterMontant(facture.timbreFiscal)}
+              </td>
+            </tr>
             <tr className="border-t-2 border-nuit">
               <th scope="row" className="pt-3 text-left font-semibold text-nuit">
-                Total
+                Total à payer
               </th>
               <td className="pt-3 text-right font-display text-lg font-bold text-nuit tabulaire">
                 {formaterMontant(facture.montantTotal)}

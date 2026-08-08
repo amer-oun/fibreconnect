@@ -3,7 +3,12 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 
-import { RAPPORT_LONGUEUR_MIN, libelleTypePanne, tarifDe } from "@/lib/constants";
+import {
+  RAPPORT_LONGUEUR_MIN,
+  libelleTypePanne,
+  tarifDe,
+  totauxFacture,
+} from "@/lib/constants";
 import { dinarsEnMillimes, formaterMontant } from "@/lib/monnaie";
 import { Bouton } from "@/components/ui/bouton";
 import { MessageErreur } from "@/components/ui/champs";
@@ -46,8 +51,14 @@ export default function ActionsTechnicien({
       montant: dinarsEnMillimes(Number(p.dinars.replace(",", "."))),
     }))
     .filter((p) => p.designation !== "" && Number.isFinite(p.montant) && p.montant > 0);
-  const totalFacture =
-    tarifBase + piecesRetenues.reduce((s, p) => s + p.montant, 0);
+
+  // Les mêmes totaux que ceux que le serveur calculera à la clôture : le
+  // technicien annonce à l'abonné ce que celui-ci verra sur sa facture, taxes
+  // comprises, et non un hors-taxes qu'il faudrait ensuite expliquer.
+  const totaux = totauxFacture([
+    { montant: tarifBase },
+    ...piecesRetenues,
+  ]);
 
   async function appeler(chemin: string, corps?: unknown) {
     setErreur(null);
@@ -206,11 +217,29 @@ export default function ActionsTechnicien({
             </div>
           )}
 
-          <div className="mt-3 flex justify-between gap-4 border-t border-trait pt-2 text-sm">
-            <span className="font-semibold text-nuit">Total facturé</span>
-            <span className="tabulaire font-display font-bold text-nuit">
-              {formaterMontant(totalFacture)}
-            </span>
+          <div className="mt-3 space-y-1 border-t border-trait pt-2 text-sm">
+            <div className="flex justify-between gap-4 text-ardoise">
+              <span>Total hors taxes</span>
+              <span className="tabulaire">
+                {formaterMontant(totaux.montantHT)}
+              </span>
+            </div>
+            <div className="flex justify-between gap-4 text-ardoise">
+              <span>
+                TVA {Math.round(totaux.tauxTva * 100)} % et droit de timbre
+              </span>
+              <span className="tabulaire">
+                {formaterMontant(totaux.montantTva + totaux.timbreFiscal)}
+              </span>
+            </div>
+            <div className="flex justify-between gap-4">
+              <span className="font-semibold text-nuit">
+                À payer par l’abonné
+              </span>
+              <span className="tabulaire font-display font-bold text-nuit">
+                {formaterMontant(totaux.montantTotal)}
+              </span>
+            </div>
           </div>
           <p className="mt-1.5 text-xs text-ardoise">
             La facture part chez l’abonné dès l’enregistrement du rapport. Elle

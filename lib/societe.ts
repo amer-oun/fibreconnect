@@ -1,17 +1,16 @@
 /**
  * The company's identity, as printed at the top of an invoice.
  *
- * **The registration numbers are deliberately absent, and the document says so
- * in its footer.** A Tunisian invoice is a tax document: it carries a matricule
- * fiscal, and the amounts carry TVA. Inventing a plausible-looking matricule
- * would produce a piece of paper that could pass for a genuine tax invoice —
- * which is exactly the line this project draws elsewhere by refusing to fake a
- * bank page. A demo document that announces itself as one is honest; one that
- * imitates an official record is not.
+ * **The matricule fiscal is deliberately all zeros, and the document says so.**
+ * A Tunisian invoice is a tax document, and inventing a plausible-looking
+ * registration number would produce a piece of paper that could pass for a
+ * genuine one — exactly the line this project draws elsewhere by refusing to
+ * fake a bank page. All zeros cannot collide with a real company's number and
+ * reads as a placeholder at a glance, while still showing where the mention
+ * belongs on the page.
  *
- * The day the real details are known: fill `matriculeFiscal`, add the TVA
- * handling, and `mentionsCompletes` becomes `true`, which removes the footer
- * note on its own.
+ * The day the real details are known: replace `matriculeFiscal` and set
+ * `mentionsReelles` to `true`. The footer note then disappears on its own.
  */
 export const SOCIETE = {
   nom: "FibreConnect",
@@ -24,16 +23,22 @@ export const SOCIETE = {
   telephone: "+216 71 234 567",
   email: "contact@fibreconnect.tn",
 
-  /** Numéro d'identification fiscale. Non renseigné : voir le commentaire. */
-  matriculeFiscal: null as string | null,
+  /**
+   * Numéro d'identification fiscale, au format tunisien
+   * `1234567/A/M/000`. Tout à zéro : c'est un exemple, pas un vrai numéro.
+   */
+  matriculeFiscal: "0000000/A/M/000",
+
+  /**
+   * Passer à `true` uniquement quand les informations ci-dessus sont celles
+   * d'une société réelle. Tant que c'est `false`, la facture porte en pied de
+   * page qu'elle n'est pas une pièce fiscale.
+   */
+  mentionsReelles: false,
 } as const;
 
-/**
- * Faux tant que les mentions légales ne sont pas complètes. Pilote la note de
- * bas de page qui empêche le document de se faire passer pour une facture
- * fiscale.
- */
-export const mentionsCompletes = SOCIETE.matriculeFiscal !== null;
+/** Pilote la note de bas de page du document. */
+export const mentionsCompletes = SOCIETE.mentionsReelles;
 
 /** `FibreConnect SARL`, tel qu'il s'écrit en en-tête. */
 export const raisonSociale = `${SOCIETE.nom} ${SOCIETE.forme}`;

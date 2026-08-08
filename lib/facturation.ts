@@ -10,6 +10,7 @@ import {
   estMoyenPaiement,
   estTypePanne,
   tarifDe,
+  totauxFacture,
 } from "@/lib/constants";
 
 /**
@@ -75,9 +76,10 @@ function referencePaiement(db: Db, prefixe: "ESP" | "PAY") {
 /** Une pièce remplacée, ajoutée par le technicien au moment de la clôture. */
 export type PieceFacturee = {
   designation: string;
-  /** En millimes. */
+  /** En millimes, **hors taxes**. */
   montant: number;
 };
+
 
 /**
  * Emits the invoice for a closed intervention.
@@ -124,13 +126,11 @@ export async function emettreFacture(
     ...pieces,
   ];
 
-  const montantTotal = lignes.reduce((somme, l) => somme + l.montant, 0);
-
   return db.facture.create({
     data: {
       interventionId,
       numero: await numeroFacture(db),
-      montantTotal,
+      ...totauxFacture(lignes),
       statut: "A_PAYER",
       lignes: { create: lignes },
     },
@@ -215,7 +215,7 @@ export async function corrigerFacture({
     return tx.facture.update({
       where: { id: factureId },
       data: {
-        montantTotal: lignes.reduce((s, l) => s + l.montant, 0),
+        ...totauxFacture(lignes),
         lignes: { create: lignes },
         motifRectification: motif,
         dateRectification: new Date(),
@@ -592,7 +592,7 @@ export async function bilanFinancier(periode?: { debut: Date; fin: Date }) {
     await Promise.all([
       prisma.facture.aggregate({
         where: { statut: { not: "ANNULEE" }, ...filtreFacture },
-        _sum: { montantTotal: true },
+        _sum: { montantTotal: true, montantHT: true, montantTva: true },
         _count: true,
       }),
       prisma.paiement.aggregate({
@@ -624,7 +624,12 @@ export async function bilanFinancier(periode?: { debut: Date; fin: Date }) {
 
   return {
     nombreFactures: facture._count,
+    /** Toutes taxes comprises : ce que les abonnés doivent. */
     facture: totalFacture,
+    /** Hors taxes : ce que la société gagne réellement. */
+    chiffreAffairesHT: facture._sum.montantHT ?? 0,
+    /** Collectée pour l'État, à reverser. */
+    tvaCollectee: facture._sum.montantTva ?? 0,
     encaisse: totalEncaisse,
     enAttente: Math.max(0, totalFacture - totalEncaisse),
     chezTechniciens: chezTechniciens._sum.montant ?? 0,
@@ -711,7 +716,9 @@ export async function paieDuMois(debut: Date, fin: Date): Promise<LignePaie[]> {
       },
       orderBy: { matricule: "asc" },
     }),
-    prisma.bulletinPaie.findMany({ where: { mois } }),
+    // Seuls les bulletins en vigueur comptent : un bulletin annulé laisse le
+    // mois « à verser », ce qui est exactement le but de l'annulation.
+    prisma.bulletinPaie.findMany({ where: { mois, actif: true } }),
   ]);
 
   const parTechnicien = new Map(bulletins.map((b) => [b.technicienId, b]));
@@ -728,10 +735,18 @@ export async function paieDuMois(debut: Date, fin: Date): Promise<LignePaie[]> {
             dateFin: { gte: debut, lte: fin },
           },
         },
-        select: { montantTotal: true },
+        select: { montantHT: true },
       });
 
-      const chiffreAffaires = factures.reduce((s, f) => s + f.montantTotal, 0);
+      /*
+       * La commission porte sur le HORS TAXES.
+       *
+       * La TVA et le droit de timbre sont encaissés pour le compte de l'État :
+       * ils transitent par la société sans jamais lui appartenir. Commissionner
+       * dessus reviendrait à payer le technicien sur de l'argent que
+       * l'entreprise doit reverser.
+       */
+      const chiffreAffaires = factures.reduce((s, f) => s + f.montantHT, 0);
       const commission = partDe(chiffreAffaires, t.tauxCommission);
 
       /*
@@ -851,6 +866,66 @@ export async function verserPaie({
   }
 }
 
+/**
+ * Cancels a payroll slip recorded by mistake.
+ *
+ * The slip is **not deleted**: it keeps its figures, its date and its author,
+ * and gains the reason it was withdrawn. Erasing the row would leave no trace
+ * of a month that was once declared paid, which is the one thing anyone
+ * reviewing the accounts would want to see.
+ *
+ * Setting `actif` to `null` releases the month — cancelled slips no longer
+ * collide on the unique index, so the pay can be recorded again once the
+ * mistake is understood. See the schema for why `null` and not `false`.
+ */
+export async function annulerBulletinPaie({
+  bulletinId,
+  superviseurId,
+  motif,
+}: {
+  bulletinId: string;
+  superviseurId: string;
+  motif: string;
+}) {
+  const { count } = await prisma.bulletinPaie.updateMany({
+    where: { id: bulletinId, actif: true },
+    data: {
+      actif: null,
+      motifAnnulation: motif,
+      dateAnnulation: new Date(),
+      annulePar: superviseurId,
+    },
+  });
+
+  if (count === 0) {
+    throw new ErreurMetier(
+      "Ce bulletin n’existe pas ou a déjà été annulé.",
+      404,
+    );
+  }
+}
+
+/** Bulletins annulés d'un mois, pour que la trace reste lisible à l'écran. */
+export async function bulletinsAnnules(mois: string) {
+  return prisma.bulletinPaie.findMany({
+    where: { mois, actif: null },
+    orderBy: { dateAnnulation: "desc" },
+    select: {
+      id: true,
+      montantTotal: true,
+      dateVersement: true,
+      dateAnnulation: true,
+      motifAnnulation: true,
+      technicien: {
+        select: {
+          matricule: true,
+          utilisateur: { select: { nom: true, prenom: true } },
+        },
+      },
+    },
+  });
+}
+
 /* -------------------------------------------------------------------------- */
 /* Lectures partagees                                                         */
 /* -------------------------------------------------------------------------- */
@@ -859,6 +934,10 @@ export async function verserPaie({
 export const selectionFacture = {
   id: true,
   numero: true,
+  montantHT: true,
+  tauxTva: true,
+  montantTva: true,
+  timbreFiscal: true,
   montantTotal: true,
   statut: true,
   dateEmission: true,

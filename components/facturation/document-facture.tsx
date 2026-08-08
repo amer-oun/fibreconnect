@@ -156,7 +156,7 @@ export default function DocumentFacture({
               Désignation
             </th>
             <th scope="col" className="pb-2 text-right eyebrow">
-              Montant
+              Montant HT
             </th>
           </tr>
         </thead>
@@ -172,10 +172,34 @@ export default function DocumentFacture({
         </tbody>
         <tfoot>
           <tr>
-            <th scope="row" className="pt-4 text-left font-semibold">
-              Total à payer
+            <th scope="row" className="pt-4 text-left font-medium text-ardoise">
+              Total hors taxes
             </th>
-            <td className="pt-4 text-right font-display text-xl font-bold tabulaire whitespace-nowrap">
+            <td className="pt-4 text-right tabulaire whitespace-nowrap">
+              {formaterMontant(facture.montantHT)}
+            </td>
+          </tr>
+          <tr>
+            <th scope="row" className="py-1 text-left font-medium text-ardoise">
+              TVA {Math.round(facture.tauxTva * 100)} %
+            </th>
+            <td className="py-1 text-right tabulaire whitespace-nowrap">
+              {formaterMontant(facture.montantTva)}
+            </td>
+          </tr>
+          <tr>
+            <th scope="row" className="pb-3 text-left font-medium text-ardoise">
+              Droit de timbre
+            </th>
+            <td className="pb-3 text-right tabulaire whitespace-nowrap">
+              {formaterMontant(facture.timbreFiscal)}
+            </td>
+          </tr>
+          <tr className="border-t border-nuit">
+            <th scope="row" className="pt-3 text-left font-semibold">
+              Total toutes taxes comprises
+            </th>
+            <td className="pt-3 text-right font-display text-xl font-bold tabulaire whitespace-nowrap">
               {formaterMontant(annulee ? 0 : facture.montantTotal)}
             </td>
           </tr>
@@ -281,13 +305,16 @@ export default function DocumentFacture({
         <p>
           {SOCIETE.activite} · {raisonSociale} · {SOCIETE.telephone}
         </p>
+        {SOCIETE.matriculeFiscal && (
+          <p className="mt-1">Matricule fiscal : {SOCIETE.matriculeFiscal}</p>
+        )}
         {!mentionsCompletes && (
           // Sans cette phrase, le document ressemblerait à une facture fiscale
           // sans en être une. Voir lib/societe.ts.
           <p className="mt-2 font-medium text-nuit">
-            Document de démonstration. Les mentions légales obligatoires
-            (matricule fiscal, TVA) ne sont pas renseignées : il ne constitue pas
-            une facture fiscale.
+            Document de démonstration : le matricule fiscal ci-dessus est un
+            numéro d’exemple et non celui d’une société réelle. Cette facture ne
+            constitue pas une pièce fiscale.
           </p>
         )}
       </footer>
