@@ -163,6 +163,16 @@
 
 /* Impression : on retire le chrome, on garde le contenu. */
 @media print {
+  /*
+   * La marge du papier est posée ici, une fois. Le document, lui, garde son
+   * propre rembourrage à l'écran et le perd à l'impression : deux marges
+   * empilées donneraient un bloc de texte perdu au milieu de la page.
+   */
+  @page {
+    size: A4;
+    margin: 14mm;
+  }
+
   .sans-impression {
     display: none !important;
   }
@@ -174,5 +184,24 @@
   .zone-impression {
     border: none !important;
     padding: 0 !important;
+  }
+
+  .document {
+    max-width: none;
+    padding: 0;
+  }
+
+  /*
+   * Une ligne de facture coupée en deux par un saut de page laisse la
+   * désignation sur une feuille et le montant sur la suivante — le seul
+   * rapprochement que le lecteur avait à faire.
+   */
+  tr,
+  .break-inside-avoid {
+    break-inside: avoid;
+  }
+
+  thead {
+    display: table-header-group;
   }
 }

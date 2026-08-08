@@ -203,12 +203,22 @@ export default async function PageSuivi({
               facture={intervention.facture}
               resteAPayer={reste}
               action={
-                reste > 0 ? (
-                  <FormulairePaiement
-                    factureId={intervention.facture.id}
-                    resteAPayer={reste}
-                  />
-                ) : null
+                <div className="flex flex-col gap-5">
+                  {reste > 0 && (
+                    <FormulairePaiement
+                      factureId={intervention.facture.id}
+                      resteAPayer={reste}
+                    />
+                  )}
+                  <LienBouton
+                    href={`/client/facture/${intervention.facture.id}`}
+                    variante="secondaire"
+                    taille="petit"
+                    className="sans-impression self-start"
+                  >
+                    Voir la facture à imprimer
+                  </LienBouton>
+                </div>
               }
             />
           )}

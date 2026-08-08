@@ -11,7 +11,7 @@ import { EntetePage, Panneau, TitrePanneau } from "@/components/ui/surfaces";
 import { LienBouton } from "@/components/ui/bouton";
 import BoutonImpression from "@/components/ui/bouton-impression";
 import { BadgeStatut, BadgeZone, Reference } from "@/components/ui/badges";
-import PanneauFacture from "@/components/facturation/panneau-facture";
+import DocumentFacture from "@/components/facturation/document-facture";
 import RectificationFacture from "@/components/facturation/rectification-facture";
 
 export const metadata: Metadata = { title: "Facture" };
@@ -100,48 +100,24 @@ export default async function PageFactureSuperviseur({
       />
 
       <div className="flex flex-col gap-6">
-        <PanneauFacture facture={facture} resteAPayer={reste} />
+        {/* Le superviseur relit exactement le document que l'abonné a reçu.
+            Deux rendus différents de la même facture finiraient par diverger,
+            et celui qui tient le mauvais aurait raison de s'en méfier. */}
+        <div className="zone-impression border border-trait bg-white">
+          <DocumentFacture
+            facture={facture}
+            resteAPayer={reste}
+            intervention={intervention}
+          />
+        </div>
 
-        <Panneau>
+        <Panneau className="sans-impression">
           <TitrePanneau
             actions={<BadgeZone zone={intervention.client.zone} />}
           >
-            Abonné et intervention
+            Ce que le technicien a rapporté
           </TitrePanneau>
           <dl className="grid gap-4 p-5 text-sm sm:grid-cols-2">
-            <div>
-              <dt className="eyebrow">Abonné</dt>
-              <dd className="mt-0.5 text-nuit">
-                {intervention.client.utilisateur.prenom}{" "}
-                {intervention.client.utilisateur.nom}
-                <br />
-                <span className="font-mono text-xs text-ardoise">
-                  {intervention.client.utilisateur.telephone} ·{" "}
-                  {intervention.client.numContrat}
-                </span>
-              </dd>
-            </div>
-            <div>
-              <dt className="eyebrow">Lieu</dt>
-              <dd className="mt-0.5 text-nuit">
-                {intervention.client.adresse}
-                <br />
-                {intervention.client.ville}
-              </dd>
-            </div>
-            <div>
-              <dt className="eyebrow">Technicien</dt>
-              <dd className="mt-0.5 text-nuit">
-                {intervention.technicien
-                  ? `${intervention.technicien.utilisateur.prenom} ${intervention.technicien.utilisateur.nom}`
-                  : "—"}
-                {intervention.technicien?.matricule && (
-                  <span className="ml-2 font-mono text-xs text-ardoise">
-                    {intervention.technicien.matricule}
-                  </span>
-                )}
-              </dd>
-            </div>
             <div>
               <dt className="eyebrow">Clôturée le</dt>
               <dd className="mt-0.5 text-nuit">
@@ -150,9 +126,13 @@ export default async function PageFactureSuperviseur({
                   : "—"}
               </dd>
             </div>
+            <div>
+              <dt className="eyebrow">Secteur</dt>
+              <dd className="mt-0.5 text-nuit">{intervention.client.zone}</dd>
+            </div>
             {intervention.rapport && (
               <div className="sm:col-span-2">
-                <dt className="eyebrow">Rapport du technicien</dt>
+                <dt className="eyebrow">Rapport</dt>
                 <dd className="mt-1 leading-relaxed whitespace-pre-line text-ardoise">
                   {intervention.rapport}
                 </dd>

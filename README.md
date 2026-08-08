@@ -57,6 +57,7 @@ Projet de fin d'études (stage BTP).
 /client/dashboard               mes demandes + recherche et filtres
 /client/nouvelle-panne          déclaration, avec photo facultative
 /client/suivi/[id]              timeline, rapport, facture et paiement, notation
+/client/facture/[id]            la facture en document A4, à imprimer ou en PDF
 /client/profil                  coordonnées, zone, mot de passe
 
 /technicien/dashboard           pannes de la zone couverte
@@ -432,6 +433,34 @@ moment de rédiger son rapport.
 | Changement de routeur | 100,000 DT |
 | Autre | 70,000 DT |
 
+### Le document
+
+L'abonné dispose d'un exemplaire à garder, sur `/client/facture/[id]` : en-tête
+de la société, bloc « Facturé à », détail ligne par ligne, règlements, solde. La
+boîte d'impression du navigateur propose « Enregistrer au format PDF » sur toutes
+les plateformes, ce qui évite d'embarquer une bibliothèque PDF pour un document
+que le navigateur sait déjà produire.
+
+C'est une page à part et non un panneau de plus sur le suivi : le suivi raconte
+l'avancement d'une panne, la facture est une pièce qu'on conserve. Les mélanger
+donnerait un document couvert de boutons dès qu'on l'imprime. Le document est
+aussi **délibérément différent du reste de l'interface** — ni panneau, ni badge,
+ni filet : le chrome qui aide à naviguer dans une liste ne fait que gêner qui
+vérifie ce qu'il doit.
+
+Le superviseur relit **exactement le même document** sur
+`/superviseur/factures/[id]`. Deux rendus différents de la même facture
+finiraient par diverger, et celui qui tiendrait le mauvais aurait raison de s'en
+méfier.
+
+> **Ce document n'est pas une facture fiscale, et il le dit.** Une facture
+> tunisienne porte un matricule fiscal et de la TVA. Inventer un matricule
+> plausible produirait un papier capable de passer pour un document officiel —
+> exactement la ligne que ce projet trace déjà en refusant de simuler une page
+> bancaire crédible. Les mentions manquantes sont signalées en pied de page, et
+> `mentionsCompletes` dans [lib/societe.ts](lib/societe.ts) fait disparaître la
+> note le jour où les vraies informations sont renseignées.
+
 ### Corriger une facture erronée
 
 Un technicien qui tape 2100 DT au lieu de 210 DT crée une dette que l'abonné ne
@@ -644,29 +673,31 @@ Le circuit de l'argent se démontre en trois connexions, sans rien préparer.
    simulée s'affiche, annonce qu'aucun argent ne circule, et attend votre
    confirmation. Confirmez : la facture passe en « Payée » et le règlement
    s'ajoute au bas de la facture avec sa référence.
+4. « Voir la facture à imprimer » ouvre le document complet. Imprimez-le, ou
+   enregistrez-le en PDF depuis la boîte d'impression du navigateur.
 
 **En espèces, du côté du technicien.**
 
-4. Connectez-vous en technicien `mehdi.gharbi@fibreconnect.tn` (FC-003) et
+5. Connectez-vous en technicien `mehdi.gharbi@fibreconnect.tn` (FC-003) et
    ouvrez « Ma caisse » : la facture restante de Slim y figure.
-5. « Encaisser en espèces », le montant est déjà rempli. Validez : la facture
+6. « Encaisser en espèces », le montant est déjà rempli. Validez : la facture
    est soldée, et l'indicateur « Espèces en main » augmente d'autant. Cet
    argent est désormais **dû par le technicien à la société**.
-6. « Déclarer la remise » : les espèces quittent la ligne « en main » et
+7. « Déclarer la remise » : les espèces quittent la ligne « en main » et
    passent en attente d'accusé de réception.
 
 **Du côté du superviseur.**
 
-7. Connectez-vous en superviseur, page **Finances**. La remise de Mehdi attend
+8. Connectez-vous en superviseur, page **Finances**. La remise de Mehdi attend
    votre accusé de réception, et un virement annoncé attend d'être pointé sur
    le relevé bancaire.
-8. Accusez réception de la remise : elle passe en « Reçue par la société » et
+9. Accusez réception de la remise : elle passe en « Reçue par la société » et
    l'indicateur « Espèces chez les techniciens » baisse.
-9. Confirmez le virement : la facture correspondante se solde.
-10. En bas de page, le tableau de paie montre pour chaque technicien son fixe,
+10. Confirmez le virement : la facture correspondante se solde.
+11. En bas de page, le tableau de paie montre pour chaque technicien son fixe,
     sa commission sur ce qu'il a facturé ce mois-ci, et — dans une colonne
     séparée, jamais déduite — les espèces qu'il détient encore.
-11. « Enregistrer le versement » sur une ligne : un panneau nomme le technicien,
+12. « Enregistrer le versement » sur une ligne : un panneau nomme le technicien,
     le mois et le montant, et redemande confirmation. La ligne passe à
     « Versée le… », et le bouton disparaît — ce mois-là ne peut plus être payé
     une seconde fois. Suivez « Mois précédent » pour voir un mois entièrement
@@ -843,6 +874,7 @@ lib/
   interventions.ts         changerStatut() et contrôles de propriété
   facturation.ts           émission, solde, encaissement, remises, paie
   monnaie.ts               montants en millimes, jamais en décimaux
+  societe.ts               identité imprimée en tête de facture
   validations.ts           schémas zod
   session.ts               exigerRole(), utilisateurConnecte()
   api.ts                   réponses et gestion d'erreurs communes
@@ -1090,6 +1122,11 @@ encaissement — même partiel — elle est figée. Le geste juste serait alors 
 sens contraire. Il demande une table de plus et, surtout, de renoncer à la
 relation un-à-un entre intervention et facture, puisqu'il faudrait pouvoir en
 réémettre une. C'est un choix de modélisation, pas un oubli.
+
+**Aucune TVA, aucun matricule fiscal.** Les montants sont des totaux nets et le
+document le dit en pied de page. Les ajouter n'est pas qu'un champ de plus : il
+faut un taux par ligne, un sous-total hors taxe, et le choix de ce qui est
+assujetti — une question comptable, pas technique.
 
 **Un bulletin de paie ne s'annule pas.** L'enregistrement du versement est
 définitif, comme l'accusé de réception d'une remise d'espèces. Une erreur de
