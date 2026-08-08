@@ -257,6 +257,141 @@ export const TYPE_PANNE_LABELS: Record<TypePanne, string> = {
 };
 
 /* -------------------------------------------------------------------------- */
+/* Tarifs                                                                     */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * Prix de base d'une intervention, par type de panne, **en millimes**
+ * (voir lib/monnaie.ts : 1 DT = 1000 millimes).
+ *
+ * Le tarif est annoncé au client au moment où il déclare sa panne, pas
+ * découvert à la fin : c'est la seule façon honnête de facturer un
+ * déplacement. Le technicien peut ajouter les pièces qu'il a remplacées à la
+ * clôture, chacune sur sa propre ligne de facture.
+ */
+export const TARIFS: Record<TypePanne, number> = {
+  COUPURE_TOTALE: 80_000,
+  DEBIT_FAIBLE: 60_000,
+  ONT_DEFECTUEUX: 120_000,
+  CABLE_ENDOMMAGE: 150_000,
+  NOUVELLE_INSTALLATION: 250_000,
+  CHANGEMENT_ROUTEUR: 100_000,
+  AUTRE: 70_000,
+};
+
+export function tarifDe(typePanne: string): number {
+  return estTypePanne(typePanne) ? TARIFS[typePanne] : TARIFS.AUTRE;
+}
+
+/* -------------------------------------------------------------------------- */
+/* Moyens de paiement                                                         */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * Comment l'abonné règle sa facture.
+ *
+ * `ESPECES` est à part : c'est le seul moyen où l'argent passe par le
+ * technicien au lieu d'aller directement à la société. Il crée donc une dette
+ * du technicien envers l'entreprise, que le versement vient éteindre.
+ */
+export const MOYENS_PAIEMENT = ["ESPECES", "CARTE", "VIREMENT", "D17"] as const;
+export type MoyenPaiement = (typeof MOYENS_PAIEMENT)[number];
+
+export const MOYEN_PAIEMENT_LABELS: Record<MoyenPaiement, string> = {
+  ESPECES: "Espèces au technicien",
+  CARTE: "Carte bancaire",
+  VIREMENT: "Virement bancaire",
+  D17: "D17 / e-Dinar",
+};
+
+/** Ce que le client lit sous chaque choix, avant de s'engager. */
+export const MOYEN_PAIEMENT_DETAILS: Record<MoyenPaiement, string> = {
+  ESPECES:
+    "Vous réglez directement le technicien lors de son passage. Il enregistre l’encaissement depuis son téléphone et vous recevez le reçu ici.",
+  CARTE: "Paiement immédiat. Le reçu est disponible aussitôt.",
+  VIREMENT:
+    "Le virement met un à trois jours ouvrés. Votre facture reste « en attente » jusqu’à sa réception.",
+  D17: "Paiement immédiat depuis l’application D17 de La Poste tunisienne.",
+};
+
+/**
+ * Les moyens que l'abonné peut déclencher lui-même depuis son espace.
+ *
+ * Écrits en toutes lettres plutôt que dérivés par un `filter` : zod a besoin
+ * d'un tuple littéral pour en faire un `z.enum`. Le `satisfies` garantit
+ * qu'aucune valeur inconnue de `MOYENS_PAIEMENT` ne s'y glisse.
+ */
+export const MOYENS_EN_LIGNE = [
+  "CARTE",
+  "VIREMENT",
+  "D17",
+] as const satisfies readonly MoyenPaiement[];
+
+export function estMoyenPaiement(valeur: string): valeur is MoyenPaiement {
+  return (MOYENS_PAIEMENT as readonly string[]).includes(valeur);
+}
+
+export function libelleMoyenPaiement(valeur: string): string {
+  return estMoyenPaiement(valeur) ? MOYEN_PAIEMENT_LABELS[valeur] : valeur;
+}
+
+/* -------------------------------------------------------------------------- */
+/* Statuts de facture et de paiement                                          */
+/* -------------------------------------------------------------------------- */
+
+export const STATUTS_FACTURE = ["A_PAYER", "PAYEE", "ANNULEE"] as const;
+export type StatutFacture = (typeof STATUTS_FACTURE)[number];
+
+export const STATUT_FACTURE_LABELS: Record<StatutFacture, string> = {
+  A_PAYER: "À payer",
+  PAYEE: "Payée",
+  ANNULEE: "Annulée",
+};
+
+export const STATUT_FACTURE_COULEURS: Record<StatutFacture, string> = {
+  A_PAYER: "bg-amber-50 text-amber-800 border-amber-300",
+  PAYEE: "bg-green-50 text-green-800 border-green-300",
+  ANNULEE: "bg-slate-100 text-slate-700 border-slate-300",
+};
+
+/**
+ * `EN_ATTENTE` existe pour le virement, qui met des jours à arriver, et pour
+ * un paiement en ligne commencé mais pas confirmé. Un paiement n'éteint une
+ * facture que lorsqu'il est `CONFIRME`.
+ */
+export const STATUTS_PAIEMENT = ["EN_ATTENTE", "CONFIRME", "ECHOUE"] as const;
+export type StatutPaiement = (typeof STATUTS_PAIEMENT)[number];
+
+export const STATUT_PAIEMENT_LABELS: Record<StatutPaiement, string> = {
+  EN_ATTENTE: "En attente",
+  CONFIRME: "Confirmé",
+  ECHOUE: "Échoué",
+};
+
+/**
+ * Reversement des espèces collectées par un technicien.
+ * `EN_ATTENTE` : le technicien déclare avoir remis l'argent.
+ * `CONFIRME` : le superviseur l'a effectivement reçu.
+ */
+export const STATUTS_VERSEMENT = ["EN_ATTENTE", "CONFIRME"] as const;
+export type StatutVersement = (typeof STATUTS_VERSEMENT)[number];
+
+export const STATUT_VERSEMENT_LABELS: Record<StatutVersement, string> = {
+  EN_ATTENTE: "Remise déclarée",
+  CONFIRME: "Reçue par la société",
+};
+
+/* -------------------------------------------------------------------------- */
+/* Remuneration des techniciens                                               */
+/* -------------------------------------------------------------------------- */
+
+/** Salaire de base mensuel par défaut, en millimes (800 DT). */
+export const SALAIRE_BASE_DEFAUT = 800_000;
+
+/** Part du montant facturé qui revient au technicien. */
+export const TAUX_COMMISSION_DEFAUT = 0.15;
+
+/* -------------------------------------------------------------------------- */
 /* Regles metier chiffrees                                                    */
 /* -------------------------------------------------------------------------- */
 

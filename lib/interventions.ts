@@ -48,6 +48,16 @@ type ChangementStatut = {
   commentaire?: string | null;
   /** Champs a mettre a jour en meme temps que le statut. */
   champs?: Prisma.InterventionUpdateInput;
+  /**
+   * Ecriture supplementaire a faire dans la MEME transaction que la transition.
+   *
+   * Sert a la facture emise a la cloture : une intervention terminee sans
+   * facture, ou une facture sans cloture, sont deux etats que personne ne
+   * saurait rattraper. Ils ne doivent donc pas pouvoir exister, meme une
+   * seconde. Le module de facturation n'est pas importe ici : c'est l'appelant
+   * qui fournit le travail, ce qui garde `changerStatut` ignorant du reste.
+   */
+  apres?: (tx: Prisma.TransactionClient) => Promise<void>;
 };
 
 export async function changerStatut({
@@ -57,6 +67,7 @@ export async function changerStatut({
   technicienId = null,
   commentaire = null,
   champs = {},
+  apres,
 }: ChangementStatut) {
   return prisma.$transaction(async (tx) => {
     const intervention = await tx.intervention.findUnique({
@@ -94,6 +105,8 @@ export async function changerStatut({
         commentaire,
       },
     });
+
+    if (apres) await apres(tx);
 
     return misAJour;
   });
@@ -187,7 +200,7 @@ export async function exigerProprieteTechnicien(
 ) {
   const intervention = await prisma.intervention.findUnique({
     where: { id: interventionId },
-    select: { id: true, technicienId: true, statut: true },
+    select: { id: true, technicienId: true, statut: true, typePanne: true },
   });
 
   if (!intervention) {

@@ -1,0 +1,400 @@
+import { afterAll, beforeAll, describe, expect, it } from "vitest";
+
+import { preparerBase, semerJeuDeTest, supprimerBase } from "./aide";
+import { prisma as client } from "@/lib/prisma";
+import { ErreurMetier, changerStatut, creerIntervention } from "@/lib/interventions";
+import {
+  bilanFinancier,
+  confirmerPaiement,
+  confirmerVersement,
+  declarerVersement,
+  echouerPaiement,
+  emettreFacture,
+  encaisserEspeces,
+  especesEnMain,
+  ouvrirPaiement,
+  paieDuMois,
+  resteAPayer,
+} from "@/lib/facturation";
+import { TARIFS } from "@/lib/constants";
+import { dinarsEnMillimes, formaterMontant, partDe } from "@/lib/monnaie";
+
+/**
+ * Invoicing and settlement, against a real database.
+ *
+ * The point of these tests is not that additions work: it is that money cannot
+ * be created or lost by the paths the application offers — no double counting
+ * on a replayed confirmation, no invoice settled by an unconfirmed transfer,
+ * no cash that stops being owed without someone acknowledging it.
+ */
+
+type Prisma = Awaited<ReturnType<typeof preparerBase>>;
+type Jeu = Awaited<ReturnType<typeof semerJeuDeTest>>;
+
+let prisma: Prisma;
+let jeu: Jeu;
+
+beforeAll(async () => {
+  prisma = await preparerBase();
+  jeu = await semerJeuDeTest(prisma);
+});
+
+afterAll(async () => {
+  await prisma.$disconnect();
+  supprimerBase();
+});
+
+/** Une intervention terminée par le technicien A, avec sa facture. */
+async function interventionFacturee(options?: {
+  typePanne?: string;
+  pieces?: { designation: string; montant: number }[];
+}) {
+  const typePanne = options?.typePanne ?? "COUPURE_TOTALE";
+
+  const intervention = await creerIntervention({
+    clientId: jeu.clientA.id,
+    typePanne,
+    priorite: "NORMALE",
+    description: "Coupure totale de la ligne depuis ce matin, voyant rouge.",
+  });
+
+  await changerStatut({
+    interventionId: intervention.id,
+    vers: "ASSIGNEE",
+    action: "ACCEPTATION",
+    technicienId: jeu.techA.id,
+    champs: { technicien: { connect: { id: jeu.techA.id } } },
+  });
+  await changerStatut({
+    interventionId: intervention.id,
+    vers: "EN_COURS",
+    action: "DEMARRAGE",
+    technicienId: jeu.techA.id,
+    champs: { dateDebut: new Date() },
+  });
+
+  let factureId = "";
+  await changerStatut({
+    interventionId: intervention.id,
+    vers: "TERMINEE",
+    action: "CLOTURE",
+    technicienId: jeu.techA.id,
+    champs: { dateFin: new Date(), rapport: "Connecteur nettoyé, ligne rétablie." },
+    apres: async (tx) => {
+      const facture = await emettreFacture(tx, {
+        interventionId: intervention.id,
+        typePanne,
+        pieces: options?.pieces,
+      });
+      factureId = facture.id;
+    },
+  });
+
+  return { intervention, factureId };
+}
+
+describe("Émission de la facture", () => {
+  it("facture le tarif du type de panne, sur une ligne nommée", async () => {
+    const { factureId } = await interventionFacturee();
+    const facture = await prisma.facture.findUniqueOrThrow({
+      where: { id: factureId },
+      include: { lignes: true },
+    });
+
+    expect(facture.montantTotal).toBe(TARIFS.COUPURE_TOTALE);
+    expect(facture.lignes).toHaveLength(1);
+    expect(facture.lignes[0].designation).toContain("Coupure totale");
+    expect(facture.statut).toBe("A_PAYER");
+  });
+
+  it("ajoute les pièces sur leurs propres lignes et les additionne", async () => {
+    const { factureId } = await interventionFacturee({
+      typePanne: "ONT_DEFECTUEUX",
+      pieces: [
+        { designation: "ONT de remplacement", montant: dinarsEnMillimes(85) },
+        { designation: "Jarretière SC/APC", montant: dinarsEnMillimes(18.5) },
+      ],
+    });
+
+    const facture = await prisma.facture.findUniqueOrThrow({
+      where: { id: factureId },
+      include: { lignes: true },
+    });
+
+    expect(facture.lignes).toHaveLength(3);
+    expect(facture.montantTotal).toBe(TARIFS.ONT_DEFECTUEUX + 85_000 + 18_500);
+    // Le total est exactement la somme des lignes affichées : c'est toute la
+    // raison d'utiliser des entiers de millimes.
+    expect(facture.montantTotal).toBe(
+      facture.lignes.reduce((s, l) => s + l.montant, 0),
+    );
+  });
+
+  it("porte un numéro lisible et unique", async () => {
+    const a = await interventionFacturee();
+    const b = await interventionFacturee();
+
+    const [fa, fb] = await Promise.all([
+      prisma.facture.findUniqueOrThrow({ where: { id: a.factureId } }),
+      prisma.facture.findUniqueOrThrow({ where: { id: b.factureId } }),
+    ]);
+
+    expect(fa.numero).toMatch(/^FC-\d{4}-\d{4}$/);
+    expect(fb.numero).not.toBe(fa.numero);
+  });
+
+  it("refuse une deuxième facture pour la même intervention", async () => {
+    const { intervention } = await interventionFacturee();
+
+    await expect(
+      emettreFacture(client, {
+        interventionId: intervention.id,
+        typePanne: "COUPURE_TOTALE",
+      }),
+    ).rejects.toBeInstanceOf(ErreurMetier);
+  });
+
+  it("annule la clôture si la facture échoue — jamais de travaux sans facture", async () => {
+    const intervention = await creerIntervention({
+      clientId: jeu.clientA.id,
+      typePanne: "DEBIT_FAIBLE",
+      priorite: "NORMALE",
+      description: "Débit très faible depuis plusieurs jours, surtout le soir.",
+    });
+    await changerStatut({
+      interventionId: intervention.id,
+      vers: "ASSIGNEE",
+      action: "ACCEPTATION",
+      technicienId: jeu.techA.id,
+    });
+    await changerStatut({
+      interventionId: intervention.id,
+      vers: "EN_COURS",
+      action: "DEMARRAGE",
+      technicienId: jeu.techA.id,
+    });
+
+    await expect(
+      changerStatut({
+        interventionId: intervention.id,
+        vers: "TERMINEE",
+        action: "CLOTURE",
+        technicienId: jeu.techA.id,
+        champs: { dateFin: new Date(), rapport: "Rapport de clôture." },
+        apres: async () => {
+          throw new ErreurMetier("Panne de facturation simulée.");
+        },
+      }),
+    ).rejects.toBeInstanceOf(ErreurMetier);
+
+    const apres = await prisma.intervention.findUniqueOrThrow({
+      where: { id: intervention.id },
+    });
+    expect(apres.statut).toBe("EN_COURS");
+  });
+});
+
+describe("Paiement en ligne", () => {
+  it("ne solde rien tant que le paiement n'est pas confirmé", async () => {
+    const { factureId } = await interventionFacturee();
+    await ouvrirPaiement({ factureId, moyen: "VIREMENT" });
+
+    const facture = await prisma.facture.findUniqueOrThrow({
+      where: { id: factureId },
+    });
+    expect(facture.statut).toBe("A_PAYER");
+    expect(await resteAPayer(client, factureId)).toBe(TARIFS.COUPURE_TOTALE);
+  });
+
+  it("solde la facture à la confirmation", async () => {
+    const { factureId } = await interventionFacturee();
+    const paiement = await ouvrirPaiement({ factureId, moyen: "CARTE" });
+    await confirmerPaiement(paiement.reference);
+
+    const facture = await prisma.facture.findUniqueOrThrow({
+      where: { id: factureId },
+    });
+    expect(facture.statut).toBe("PAYEE");
+    expect(facture.datePaiement).not.toBeNull();
+    expect(await resteAPayer(client, factureId)).toBe(0);
+  });
+
+  it("ne compte pas deux fois une confirmation rejouée", async () => {
+    const { factureId } = await interventionFacturee();
+    const paiement = await ouvrirPaiement({ factureId, moyen: "D17" });
+
+    await confirmerPaiement(paiement.reference);
+    await confirmerPaiement(paiement.reference);
+    await confirmerPaiement(paiement.reference);
+
+    const paiements = await prisma.paiement.findMany({ where: { factureId } });
+    expect(paiements).toHaveLength(1);
+    expect(await resteAPayer(client, factureId)).toBe(0);
+  });
+
+  it("refuse un paiement en ligne en espèces", async () => {
+    const { factureId } = await interventionFacturee();
+    await expect(
+      ouvrirPaiement({ factureId, moyen: "ESPECES" }),
+    ).rejects.toBeInstanceOf(ErreurMetier);
+  });
+
+  it("laisse la facture à payer quand le paiement échoue", async () => {
+    const { factureId } = await interventionFacturee();
+    const paiement = await ouvrirPaiement({ factureId, moyen: "CARTE" });
+    await echouerPaiement(paiement.reference);
+
+    expect(await resteAPayer(client, factureId)).toBe(TARIFS.COUPURE_TOTALE);
+    await expect(
+      confirmerPaiement(paiement.reference),
+    ).rejects.toBeInstanceOf(ErreurMetier);
+  });
+
+  it("refuse d'ouvrir un paiement sur une facture déjà soldée", async () => {
+    const { factureId } = await interventionFacturee();
+    const paiement = await ouvrirPaiement({ factureId, moyen: "CARTE" });
+    await confirmerPaiement(paiement.reference);
+
+    await expect(
+      ouvrirPaiement({ factureId, moyen: "CARTE" }),
+    ).rejects.toBeInstanceOf(ErreurMetier);
+  });
+});
+
+describe("Espèces et dette du technicien", () => {
+  it("encaisser des espèces solde la facture et crée la dette", async () => {
+    const avant = await especesEnMain(jeu.techA.id);
+    const { factureId } = await interventionFacturee();
+
+    await encaisserEspeces({
+      factureId,
+      technicienId: jeu.techA.id,
+      montant: TARIFS.COUPURE_TOTALE,
+    });
+
+    const facture = await prisma.facture.findUniqueOrThrow({
+      where: { id: factureId },
+    });
+    expect(facture.statut).toBe("PAYEE");
+    expect(await especesEnMain(jeu.techA.id)).toBe(
+      avant + TARIFS.COUPURE_TOTALE,
+    );
+  });
+
+  it("accepte un paiement partiel sans solder la facture", async () => {
+    const { factureId } = await interventionFacturee();
+    const moitie = TARIFS.COUPURE_TOTALE / 2;
+
+    await encaisserEspeces({
+      factureId,
+      technicienId: jeu.techA.id,
+      montant: moitie,
+    });
+
+    const facture = await prisma.facture.findUniqueOrThrow({
+      where: { id: factureId },
+    });
+    expect(facture.statut).toBe("A_PAYER");
+    expect(await resteAPayer(client, factureId)).toBe(moitie);
+  });
+
+  it("refuse d'encaisser plus que le reste dû", async () => {
+    const { factureId } = await interventionFacturee();
+
+    await expect(
+      encaisserEspeces({
+        factureId,
+        technicienId: jeu.techA.id,
+        montant: TARIFS.COUPURE_TOTALE + 1,
+      }),
+    ).rejects.toBeInstanceOf(ErreurMetier);
+  });
+
+  it("une remise éteint la dette, et seule la confirmation la clôt", async () => {
+    const { factureId } = await interventionFacturee();
+    await encaisserEspeces({
+      factureId,
+      technicienId: jeu.techB.id,
+      montant: TARIFS.COUPURE_TOTALE,
+    });
+
+    const detenu = await especesEnMain(jeu.techB.id);
+    expect(detenu).toBeGreaterThan(0);
+
+    const versement = await declarerVersement({ technicienId: jeu.techB.id });
+    expect(versement.montant).toBe(detenu);
+    expect(versement.statut).toBe("EN_ATTENTE");
+    // Declaree, donc plus « en main » : elle est desormais suivie par la remise.
+    expect(await especesEnMain(jeu.techB.id)).toBe(0);
+
+    await confirmerVersement({
+      versementId: versement.id,
+      superviseurId: "superviseur-de-test",
+    });
+    const confirme = await prisma.versement.findUniqueOrThrow({
+      where: { id: versement.id },
+    });
+    expect(confirme.statut).toBe("CONFIRME");
+    expect(confirme.dateConfirmation).not.toBeNull();
+
+    // Deux confirmations ne se produisent pas : la remise n'est plus en attente.
+    await expect(
+      confirmerVersement({
+        versementId: versement.id,
+        superviseurId: "superviseur-de-test",
+      }),
+    ).rejects.toBeInstanceOf(ErreurMetier);
+  });
+
+  it("refuse une remise quand il n'y a rien à remettre", async () => {
+    await expect(
+      declarerVersement({ technicienId: jeu.techB.id }),
+    ).rejects.toBeInstanceOf(ErreurMetier);
+  });
+});
+
+describe("Bilan et paie", () => {
+  it("sépare ce qui est encaissé de ce qui dort chez les techniciens", async () => {
+    const bilan = await bilanFinancier();
+
+    expect(bilan.facture).toBeGreaterThan(0);
+    expect(bilan.encaisse).toBeLessThanOrEqual(bilan.facture);
+    expect(bilan.enAttente).toBe(bilan.facture - bilan.encaisse);
+    // Les especes detenues font partie de l'encaisse : l'abonne a paye, la
+    // societe ne l'a pas encore recu. Les confondre masquerait le jour ou un
+    // technicien cesse de reverser.
+    expect(bilan.chezTechniciens).toBeLessThanOrEqual(bilan.encaisse);
+  });
+
+  it("commissionne le travail fait, payé ou non", async () => {
+    const debut = new Date(Date.now() - 24 * 3600 * 1000);
+    const fin = new Date(Date.now() + 24 * 3600 * 1000);
+    const paie = await paieDuMois(debut, fin);
+
+    const ligne = paie.find((l) => l.technicienId === jeu.techA.id);
+    expect(ligne).toBeDefined();
+    expect(ligne!.interventions).toBeGreaterThan(0);
+    expect(ligne!.commission).toBe(
+      partDe(ligne!.chiffreAffaires, ligne!.tauxCommission),
+    );
+    expect(ligne!.total).toBe(ligne!.salaireBase + ligne!.commission);
+  });
+});
+
+describe("Montants", () => {
+  it("affiche toujours trois décimales, comme le dinar", () => {
+    expect(formaterMontant(105_500)).toMatch(/105,500\s*DT/);
+    expect(formaterMontant(80_000)).toMatch(/80,000\s*DT/);
+    expect(formaterMontant(0)).toMatch(/0,000\s*DT/);
+  });
+
+  it("convertit une saisie en dinars sans dérive", () => {
+    expect(dinarsEnMillimes(18.5)).toBe(18_500);
+    expect(dinarsEnMillimes(0.1) + dinarsEnMillimes(0.2)).toBe(300);
+  });
+
+  it("arrondit une commission au millime", () => {
+    expect(partDe(105_500, 0.15)).toBe(15_825);
+    expect(Number.isInteger(partDe(333_333, 0.15))).toBe(true);
+  });
+});

@@ -5,6 +5,9 @@ import { prisma } from "@/lib/prisma";
 import { exigerRole } from "@/lib/session";
 import { libelleTypePanne } from "@/lib/constants";
 import { formaterDateHeure, formaterDuree } from "@/lib/dates";
+import { resteAPayer, selectionFacture } from "@/lib/facturation";
+import PanneauFacture from "@/components/facturation/panneau-facture";
+import FormulairePaiement from "@/components/facturation/formulaire-paiement";
 import {
   EntetePage,
   Panneau,
@@ -52,10 +55,12 @@ export default async function PageSuivi({
       photoPanne: true,
       photoRapport: true,
       clientId: true,
+      facture: { select: selectionFacture },
       client: {
         select: {
           adresse: true,
           ville: true,
+          zone: true,
           numContrat: true,
           operateur: { select: { nom: true } },
         },
@@ -94,6 +99,12 @@ export default async function PageSuivi({
 
   const peutNoter =
     intervention.statut === "TERMINEE" && intervention.noteClient === null;
+
+  // Le solde est calcule cote serveur : un total additionne dans le navigateur
+  // serait une valeur que l'abonne peut modifier avant de la renvoyer.
+  const reste = intervention.facture
+    ? await resteAPayer(prisma, intervention.facture.id)
+    : 0;
 
   return (
     <div className="mx-auto w-full max-w-4xl px-4 py-8 sm:px-6">
@@ -187,6 +198,21 @@ export default async function PageSuivi({
             </Panneau>
           )}
 
+          {intervention.facture && (
+            <PanneauFacture
+              facture={intervention.facture}
+              resteAPayer={reste}
+              action={
+                reste > 0 ? (
+                  <FormulairePaiement
+                    factureId={intervention.facture.id}
+                    resteAPayer={reste}
+                  />
+                ) : null
+              }
+            />
+          )}
+
           {peutNoter && (
             <Panneau accent>
               <TitrePanneau>Noter l’intervention</TitrePanneau>
@@ -256,8 +282,8 @@ export default async function PageSuivi({
               ) : (
                 <p className="text-sm text-ardoise">
                   Aucun technicien n’a encore accepté votre demande. Les
-                  techniciens de {intervention.client.operateur.nom} la voient
-                  dès maintenant.
+                  techniciens FibreConnect du secteur {intervention.client.zone}{" "}
+                  la voient dès maintenant.
                 </p>
               )}
             </div>
@@ -273,6 +299,10 @@ export default async function PageSuivi({
                   <br />
                   {intervention.client.ville}
                 </dd>
+              </div>
+              <div>
+                <dt className="eyebrow">Secteur</dt>
+                <dd className="mt-0.5 text-nuit">{intervention.client.zone}</dd>
               </div>
               <div>
                 <dt className="eyebrow">Contrat</dt>

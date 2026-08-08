@@ -85,7 +85,7 @@ export default async function MesInterventions({
               message={
                 filtre
                   ? "Aucune de vos interventions ne correspond à ces critères."
-                  : "Rendez-vous sur les pannes disponibles pour en accepter une chez un abonné de votre opérateur."
+                  : `Rendez-vous sur les pannes disponibles pour en accepter une chez un abonné du secteur ${technicien.zone}.`
               }
               action={
                 !filtre && (
@@ -113,6 +113,7 @@ export default async function MesInterventions({
                     <ActionsTechnicien
                       interventionId={intervention.id}
                       statut={intervention.statut}
+                      typePanne={intervention.typePanne}
                     />
                   }
                 />
@@ -136,6 +137,7 @@ export default async function MesInterventions({
                     <ActionsTechnicien
                       interventionId={intervention.id}
                       statut={intervention.statut}
+                      typePanne={intervention.typePanne}
                     />
                   }
                 />

@@ -88,9 +88,15 @@ model Technicien {
   disponible    Boolean @default(true)
   photoUrl      String?
 
+  // Remuneration : fixe + commission. Montants en MILLIMES (voir lib/monnaie.ts).
+  salaireBase     Int   @default(800000) // 800 DT
+  tauxCommission  Float @default(0.15) // part du montant facture
+
   utilisateur   Utilisateur    @relation(fields: [utilisateurId], references: [id], onDelete: Cascade)
   interventions Intervention[]
   historiques   Historique[]
+  encaissements Paiement[] // especes encaissees pour le compte de la societe
+  versements    Versement[]
 
   @@index([zone])
 }
@@ -119,10 +125,108 @@ model Intervention {
   technicien  Technicien?  @relation(fields: [technicienId], references: [id])
   superviseur Utilisateur? @relation("Superviseur", fields: [superviseurId], references: [id])
   historiques Historique[]
+  facture     Facture?
 
   @@index([statut])
   @@index([clientId])
   @@index([technicienId])
+}
+
+/// Facture emise a la cloture d'une intervention, dans la meme transaction.
+///
+/// Une intervention terminee a toujours exactement une facture (relation 1-1),
+/// ce qui interdit l'etat « travaux faits, rien a payer » qu'aucune des deux
+/// parties ne saurait interpreter.
+///
+/// Tous les montants sont des ENTIERS EN MILLIMES (voir lib/monnaie.ts).
+model Facture {
+  id             String @id @default(cuid())
+  interventionId String @unique
+  // Reference lisible et citable au telephone : FC-2026-0007.
+  numero         String @unique
+
+  montantTotal Int // somme des lignes, figee a l'emission
+  statut       String   @default("A_PAYER") // A_PAYER | PAYEE | ANNULEE
+  dateEmission DateTime @default(now())
+  datePaiement DateTime? // renseignee quand le solde atteint le total
+
+  intervention Intervention   @relation(fields: [interventionId], references: [id], onDelete: Cascade)
+  lignes       LigneFacture[]
+  paiements    Paiement[]
+
+  @@index([statut])
+}
+
+/// Detail d'une facture : le deplacement, puis chaque piece remplacee.
+/// Garder les lignes plutot qu'un seul total permet a l'abonne de voir ce
+/// qu'il paie, et au superviseur de contester une piece sans refaire le calcul.
+model LigneFacture {
+  id          String @id @default(cuid())
+  factureId   String
+  designation String
+  montant     Int // en millimes
+
+  facture Facture @relation(fields: [factureId], references: [id], onDelete: Cascade)
+
+  @@index([factureId])
+}
+
+/// Un reglement, total ou partiel, d'une facture.
+///
+/// `technicienId` n'est renseigne que pour les especes : c'est lui qui cree la
+/// dette du technicien envers la societe, que le versement vient eteindre.
+model Paiement {
+  id        String @id @default(cuid())
+  factureId String
+  montant   Int // en millimes
+  moyen     String // ESPECES | CARTE | VIREMENT | D17
+  statut    String @default("EN_ATTENTE") // EN_ATTENTE | CONFIRME | ECHOUE
+
+  // Reference du mouvement : numero de recu especes, ou identifiant renvoye
+  // par la passerelle. Unique pour qu'un rejeu ne compte pas deux fois.
+  reference String @unique
+
+  // Technicien ayant encaisse les especes. Null pour tout paiement en ligne.
+  technicienId String?
+  // Versement dans lequel ces especes ont ete reversees. Null tant que le
+  // technicien garde l'argent.
+  versementId  String?
+
+  dateCreation     DateTime  @default(now())
+  dateConfirmation DateTime?
+
+  facture    Facture     @relation(fields: [factureId], references: [id], onDelete: Cascade)
+  technicien Technicien? @relation(fields: [technicienId], references: [id])
+  versement  Versement?  @relation(fields: [versementId], references: [id])
+
+  @@index([factureId])
+  @@index([technicienId])
+  @@index([statut])
+}
+
+/// Remise des especes collectees par un technicien a la societe.
+///
+/// Deux temps volontairement distincts : le technicien declare avoir remis
+/// l'argent (EN_ATTENTE), le superviseur confirme l'avoir recu (CONFIRME).
+/// Confondre les deux reviendrait a croire le technicien sur parole sur un
+/// mouvement d'especes, ce qu'aucune comptabilite n'accepte.
+model Versement {
+  id           String @id @default(cuid())
+  technicienId String
+  montant      Int // en millimes, somme des paiements rattaches
+  statut       String @default("EN_ATTENTE") // EN_ATTENTE | CONFIRME
+  commentaire  String?
+
+  dateCreation     DateTime  @default(now())
+  dateConfirmation DateTime?
+  // Superviseur ayant accuse reception.
+  confirmePar      String?
+
+  technicien Technicien @relation(fields: [technicienId], references: [id], onDelete: Cascade)
+  paiements  Paiement[]
+
+  @@index([technicienId])
+  @@index([statut])
 }
 
 /// Journal des transitions de statut. Ecrit uniquement par

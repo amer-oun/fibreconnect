@@ -1,6 +1,7 @@
 import { z } from "zod";
 
 import {
+  MOYENS_EN_LIGNE,
   NOTE_MAX,
   NOTE_MIN,
   PRIORITES,
@@ -90,6 +91,22 @@ export const nouvellePanneSchema = z.object({
   photoPanne: photoFacultative,
 });
 
+/**
+ * Une piece remplacee, ajoutee a la facture par le technicien.
+ *
+ * `montant` est un entier de MILLIMES, jamais des dinars decimaux : le
+ * formulaire convertit avec `dinarsEnMillimes` avant d'envoyer. Voir
+ * lib/monnaie.ts pour la raison.
+ */
+const pieceFactureeSchema = z.object({
+  designation: texteObligatoire("La désignation de la pièce").max(80),
+  montant: z
+    .number()
+    .int("Le montant doit être un nombre entier de millimes.")
+    .positive("Le montant d’une pièce doit être supérieur à zéro.")
+    .max(2_000_000, "Une pièce ne peut pas dépasser 2000 DT."),
+});
+
 /** Cloture d'une intervention par le technicien. */
 export const rapportSchema = z.object({
   rapport: z
@@ -101,6 +118,41 @@ export const rapportSchema = z.object({
     )
     .max(2000, "Le rapport ne peut pas dépasser 2000 caractères."),
   photoRapport: photoFacultative,
+  /** Pieces remplacees, facturees en plus du deplacement. */
+  pieces: z
+    .array(pieceFactureeSchema)
+    .max(10, "Dix pièces au maximum sur une même facture.")
+    .optional(),
+});
+
+/* -------------------------------------------------------------------------- */
+/* Paiements                                                                  */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * Ouverture d'un paiement en ligne par le client.
+ *
+ * `ESPECES` est volontairement absent de `MOYENS_EN_LIGNE` : l'argent liquide
+ * passe par le technicien sur place, le client ne peut pas le declencher seul
+ * depuis son espace.
+ */
+export const paiementEnLigneSchema = z.object({
+  moyen: z.enum(MOYENS_EN_LIGNE, {
+    message: "Choisissez un moyen de paiement.",
+  }),
+});
+
+/** Encaissement d'especes par le technicien, en millimes. */
+export const encaissementSchema = z.object({
+  montant: z
+    .number()
+    .int("Le montant doit être un nombre entier de millimes.")
+    .positive("Le montant encaissé doit être supérieur à zéro."),
+});
+
+/** Remise des especes a la societe, declaree par le technicien. */
+export const versementSchema = z.object({
+  commentaire: z.string().trim().max(300).optional(),
 });
 
 /** Notation d'une intervention terminee par le client. */

@@ -155,6 +155,7 @@ export default async function PannesDisponibles({
                   <ActionsTechnicien
                     interventionId={intervention.id}
                     statut={intervention.statut}
+                    typePanne={intervention.typePanne}
                   />
                 }
               />

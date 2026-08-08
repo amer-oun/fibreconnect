@@ -13,6 +13,9 @@ import { PrismaClient } from "@prisma/client";
 import bcrypt from "bcryptjs";
 import {
   BCRYPT_ROUNDS,
+  TYPE_PANNE_LABELS,
+  tarifDe,
+  type MoyenPaiement,
   type Priorite,
   type Statut,
   type TypePanne,
@@ -40,6 +43,10 @@ type Etape = {
 async function main() {
   console.log("Nettoyage de la base...");
   // Ordre imposé par les clés étrangères : les enfants d'abord.
+  await prisma.paiement.deleteMany();
+  await prisma.versement.deleteMany();
+  await prisma.ligneFacture.deleteMany();
+  await prisma.facture.deleteMany();
   await prisma.historique.deleteMany();
   await prisma.intervention.deleteMany();
   await prisma.technicien.deleteMany();
@@ -820,6 +827,192 @@ async function main() {
   }
 
   /* ---------------------------------------------------------------------- */
+  /* Factures, règlements et remises d'espèces                              */
+  /* ---------------------------------------------------------------------- */
+
+  /**
+   * Invoicing happens in a second pass, over closed interventions sorted by
+   * closing date.
+   *
+   * Doing it inside `creerIntervention` would number the invoices in the order
+   * the script happens to create them — the ten demo cases first, then six
+   * months of history — so `FC-2026-0001` would be dated after `FC-2026-0030`.
+   * A ledger whose numbers run backwards through time is the first thing an
+   * accountant notices, and the last thing they trust.
+   */
+  console.log("Émission des factures et des règlements...");
+
+  const terminees = await prisma.intervention.findMany({
+    where: { statut: "TERMINEE" },
+    orderBy: { dateFin: "asc" },
+    select: { id: true, typePanne: true, dateFin: true, technicienId: true },
+  });
+
+  const compteurs = new Map<number, number>();
+  function numeroSuivant(prefixe: string, date: Date) {
+    const annee = date.getFullYear();
+    const rang = (compteurs.get(annee) ?? 0) + 1;
+    if (prefixe === "FC") compteurs.set(annee, rang);
+    return `${prefixe}-${annee}-${String(rang).padStart(4, "0")}`;
+  }
+
+  const PIECES = [
+    { designation: "Jarretière optique SC/APC 3 m", montant: 18_000 },
+    { designation: "Bloc d'alimentation ONT", montant: 45_000 },
+    { designation: "Prise optique murale (PTO)", montant: 32_000 },
+    { designation: "Routeur Wi-Fi 6 double bande", montant: 210_000 },
+  ];
+
+  const MOYENS_TIRAGE: MoyenPaiement[] = [
+    "ESPECES",
+    "ESPECES",
+    "ESPECES",
+    "CARTE",
+    "CARTE",
+    "VIREMENT",
+    "D17",
+  ];
+
+  // Especes encaissees, regroupees par technicien pour construire les remises.
+  const especesParTechnicien = new Map<
+    string,
+    { id: string; date: Date; montant: number }[]
+  >();
+  let compteurEspeces = 0;
+  let compteurEnLigne = 0;
+  // Le premier virement tire reste en attente : sans lui, l'ecran « virements
+  // annonces » du superviseur se demontrerait vide, ce qui n'apprend rien.
+  let virementEnAttenteFait = false;
+
+  for (const [rang, intervention] of terminees.entries()) {
+    const dateFin = intervention.dateFin ?? new Date();
+
+    // Une intervention sur trois a demande une piece.
+    const piece = alea() < 0.33 ? parmi(PIECES) : null;
+    const lignes = [
+      {
+        designation: `Déplacement et main-d’œuvre — ${
+          TYPE_PANNE_LABELS[intervention.typePanne as TypePanne] ?? "Intervention"
+        }`,
+        montant: tarifDe(intervention.typePanne),
+      },
+      ...(piece ? [piece] : []),
+    ];
+    const montantTotal = lignes.reduce((s, l) => s + l.montant, 0);
+
+    // Les trois dernieres factures restent impayees : sans elles, la
+    // demonstration n'aurait rien a payer ni rien a encaisser.
+    const recente = rang >= terminees.length - 3;
+    const moyen = recente ? null : parmi(MOYENS_TIRAGE);
+    const enAttente = moyen === "VIREMENT" && !virementEnAttenteFait;
+    if (enAttente) virementEnAttenteFait = true;
+    const soldee = moyen !== null && !enAttente;
+
+    // Regle en moyenne deux jours apres la cloture.
+    const datePaiement = new Date(
+      dateFin.getTime() + (12 + Math.floor(alea() * 60)) * 3600 * 1000,
+    );
+
+    const facture = await prisma.facture.create({
+      data: {
+        interventionId: intervention.id,
+        numero: numeroSuivant("FC", dateFin),
+        montantTotal,
+        statut: soldee ? "PAYEE" : "A_PAYER",
+        dateEmission: dateFin,
+        datePaiement: soldee ? datePaiement : null,
+        lignes: { create: lignes },
+      },
+    });
+
+    if (!moyen) continue;
+
+    const especes = moyen === "ESPECES";
+    const reference = especes
+      ? `ESP-${datePaiement.getFullYear()}-${String(++compteurEspeces).padStart(4, "0")}`
+      : `PAY-${datePaiement.getFullYear()}-${String(++compteurEnLigne).padStart(4, "0")}`;
+
+    const paiement = await prisma.paiement.create({
+      data: {
+        factureId: facture.id,
+        montant: montantTotal,
+        moyen,
+        statut: enAttente ? "EN_ATTENTE" : "CONFIRME",
+        reference,
+        // Seules les especes passent par le technicien : c'est ce qui cree sa
+        // dette envers la societe.
+        technicienId: especes ? intervention.technicienId : null,
+        dateCreation: datePaiement,
+        dateConfirmation: enAttente ? null : datePaiement,
+      },
+    });
+
+    if (especes && intervention.technicienId) {
+      const liste = especesParTechnicien.get(intervention.technicienId) ?? [];
+      liste.push({ id: paiement.id, date: datePaiement, montant: montantTotal });
+      especesParTechnicien.set(intervention.technicienId, liste);
+    }
+  }
+
+  /**
+   * Remittances.
+   *
+   * Each technician remits everything except their most recent collection,
+   * which stays in their pocket — that leftover is what makes "Ma caisse"
+   * demonstrable, and what the supervisor sees under "espèces chez les
+   * techniciens". One technician has already declared theirs, so the
+   * "accuser réception" screen has something to act on instead of being shown
+   * empty, which teaches nothing.
+   */
+  let versementEnAttenteFait = false;
+
+  for (const [technicienId, paiements] of especesParTechnicien) {
+    const parDateDecroissante = [...paiements].sort(
+      (a, b) => b.date.getTime() - a.date.getTime(),
+    );
+    const [dernier, ...anciens] = parDateDecroissante;
+
+    if (anciens.length > 0) {
+      const montant = anciens.reduce((s, p) => s + p.montant, 0);
+      const dateRemise = new Date(anciens[0].date.getTime() + 24 * 3600 * 1000);
+      const versement = await prisma.versement.create({
+        data: {
+          technicienId,
+          montant,
+          statut: "CONFIRME",
+          commentaire: "Remise au bureau, fin de semaine",
+          dateCreation: dateRemise,
+          dateConfirmation: dateRemise,
+          confirmePar: superviseur.id,
+        },
+      });
+      await prisma.paiement.updateMany({
+        where: { id: { in: anciens.map((p) => p.id) } },
+        data: { versementId: versement.id },
+      });
+    }
+
+    // Le dernier encaissement : declare mais pas encore accuse pour le premier
+    // technicien, encore en poche pour les autres.
+    if (!versementEnAttenteFait) {
+      const versement = await prisma.versement.create({
+        data: {
+          technicienId,
+          montant: dernier.montant,
+          statut: "EN_ATTENTE",
+          commentaire: "Déposée au bureau ce matin",
+          dateCreation: ilYa(5),
+        },
+      });
+      await prisma.paiement.update({
+        where: { id: dernier.id },
+        data: { versementId: versement.id },
+      });
+      versementEnAttenteFait = true;
+    }
+  }
+
+  /* ---------------------------------------------------------------------- */
   /* Récapitulatif                                                          */
   /* ---------------------------------------------------------------------- */
 
@@ -846,6 +1039,9 @@ async function main() {
   console.log(`  Clients       : ${await prisma.client.count()}`);
   console.log(`  Interventions : ${await prisma.intervention.count()}`);
   console.log(`  Historiques   : ${await prisma.historique.count()}`);
+  console.log(`  Factures      : ${await prisma.facture.count()}`);
+  console.log(`  Paiements     : ${await prisma.paiement.count()}`);
+  console.log(`  Versements    : ${await prisma.versement.count()}`);
   console.log("\n  Identifiants de connexion");
   console.log(`  Mot de passe commun a tous les comptes : ${MOT_DE_PASSE_DEMO}\n`);
   console.table(comptes);

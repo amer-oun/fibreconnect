@@ -1,11 +1,16 @@
 import {
   STATUT_COMPTE_COULEURS,
   STATUT_COMPTE_LABELS,
+  STATUT_FACTURE_COULEURS,
+  STATUT_FACTURE_LABELS,
+  STATUT_PAIEMENT_LABELS,
   couleurPriorite,
   couleurStatut,
   libellePriorite,
   libelleStatut,
   type StatutCompte,
+  type StatutFacture,
+  type StatutPaiement,
 } from "@/lib/constants";
 
 /**
@@ -81,6 +86,41 @@ export function BadgeZone({ zone }: { zone: string }) {
         <circle cx="10" cy="9" r="1.75" />
       </svg>
       {zone}
+    </span>
+  );
+}
+
+/** État d'une facture : à payer, payée, annulée. */
+export function BadgeFacture({ statut }: { statut: string }) {
+  const connu = statut in STATUT_FACTURE_LABELS;
+  const cle = (connu ? statut : "A_PAYER") as StatutFacture;
+
+  return (
+    <span className={`${BASE} ${STATUT_FACTURE_COULEURS[cle]}`}>
+      {STATUT_FACTURE_LABELS[cle]}
+    </span>
+  );
+}
+
+/**
+ * État d'un règlement.
+ *
+ * Sans teinte propre : le badge de facture porte déjà la couleur, et deux
+ * pastilles colorées côte à côte se disputeraient le même sens.
+ */
+export function BadgePaiement({ statut }: { statut: string }) {
+  const connu = statut in STATUT_PAIEMENT_LABELS;
+  const cle = (connu ? statut : "EN_ATTENTE") as StatutPaiement;
+
+  const teintes: Record<StatutPaiement, string> = {
+    EN_ATTENTE: "border-trait bg-ivoire text-ardoise",
+    CONFIRME: "border-green-300 bg-green-50 text-green-800",
+    ECHOUE: "border-red-300 bg-red-50 text-red-800",
+  };
+
+  return (
+    <span className={`${BASE} ${teintes[cle]}`}>
+      {STATUT_PAIEMENT_LABELS[cle]}
     </span>
   );
 }

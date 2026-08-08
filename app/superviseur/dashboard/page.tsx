@@ -4,6 +4,8 @@ import Link from "next/link";
 import { exigerRole } from "@/lib/session";
 import { lireFenetre, statistiquesSuperviseur } from "@/lib/statistiques";
 import { ACCENTS, STATUT_COULEURS, STATUT_LABELS, type Statut } from "@/lib/constants";
+import { formaterMontant, formaterMontantCourt } from "@/lib/monnaie";
+import { bilanFinancier } from "@/lib/facturation";
 import {
   EntetePage,
   Indicateur,
@@ -29,7 +31,10 @@ export default async function TableauDeBordSuperviseur({
 }) {
   await exigerRole("SUPERVISEUR");
   const fenetre = lireFenetre((await searchParams).mois);
-  const stats = await statistiquesSuperviseur(fenetre);
+  const [stats, bilan] = await Promise.all([
+    statistiquesSuperviseur(fenetre),
+    bilanFinancier(),
+  ]);
 
   return (
     <div className="mx-auto w-full max-w-6xl px-4 py-8 sm:px-6">
@@ -83,6 +88,77 @@ export default async function TableauDeBordSuperviseur({
           </p>
         </div>
       )}
+
+      {/* L'argent en attente d'un geste : une remise a accuser, un virement a
+          pointer. Sans ce rappel ici, la page Finances ne serait ouverte que
+          par quelqu'un qui la cherche deja. */}
+      {(bilan.remisesAConfirmer.nombre > 0 ||
+        bilan.virementsAConfirmer.nombre > 0) && (
+        <div
+          role="status"
+          className="mb-8 flex flex-wrap items-center gap-x-6 gap-y-2 rounded-bloc border border-trait bg-white px-4 py-3 text-sm text-nuit"
+        >
+          {bilan.remisesAConfirmer.nombre > 0 && (
+            <p>
+              <span className="font-medium">
+                {bilan.remisesAConfirmer.nombre} remise
+                {bilan.remisesAConfirmer.nombre > 1 ? "s" : ""} d’espèces
+              </span>{" "}
+              en attente de votre accusé de réception —{" "}
+              <span className="tabulaire">
+                {formaterMontant(bilan.remisesAConfirmer.montant)}
+              </span>
+            </p>
+          )}
+          {bilan.virementsAConfirmer.nombre > 0 && (
+            <p>
+              <span className="font-medium">
+                {bilan.virementsAConfirmer.nombre} virement
+                {bilan.virementsAConfirmer.nombre > 1 ? "s" : ""} annoncé
+                {bilan.virementsAConfirmer.nombre > 1 ? "s" : ""}
+              </span>{" "}
+              à pointer sur le relevé —{" "}
+              <span className="tabulaire">
+                {formaterMontant(bilan.virementsAConfirmer.montant)}
+              </span>
+            </p>
+          )}
+          <Link
+            href="/superviseur/finances"
+            className="font-medium underline decoration-signal decoration-2 underline-offset-4"
+          >
+            Ouvrir les finances
+          </Link>
+        </div>
+      )}
+
+      {/* Argent ---------------------------------------------------------- */}
+      <div className="mb-8 grid grid-cols-2 gap-6 lg:grid-cols-4">
+        <Indicateur
+          libelle="Facturé"
+          valeur={formaterMontantCourt(bilan.facture)}
+          accent={ACCENTS.neutre}
+          precision={`${bilan.nombreFactures} facture${bilan.nombreFactures > 1 ? "s" : ""}`}
+        />
+        <Indicateur
+          libelle="Encaissé"
+          valeur={formaterMontantCourt(bilan.encaisse)}
+          accent={ACCENTS.succes}
+          precision="règlements confirmés"
+        />
+        <Indicateur
+          libelle="Reste à recouvrer"
+          valeur={formaterMontantCourt(bilan.enAttente)}
+          accent={bilan.enAttente > 0 ? ACCENTS.attention : ACCENTS.neutre}
+          precision="facturé, pas encore payé"
+        />
+        <Indicateur
+          libelle="Espèces chez les techniciens"
+          valeur={formaterMontantCourt(bilan.chezTechniciens)}
+          accent={bilan.chezTechniciens > 0 ? ACCENTS.info : ACCENTS.neutre}
+          precision="reçues, pas encore remises"
+        />
+      </div>
 
       {/* Chiffres-clés */}
       <div className="mb-8 grid grid-cols-2 gap-6 lg:grid-cols-4">

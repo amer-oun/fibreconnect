@@ -3,7 +3,8 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 
-import { RAPPORT_LONGUEUR_MIN } from "@/lib/constants";
+import { RAPPORT_LONGUEUR_MIN, libelleTypePanne, tarifDe } from "@/lib/constants";
+import { dinarsEnMillimes, formaterMontant } from "@/lib/monnaie";
 import { Bouton } from "@/components/ui/bouton";
 import { MessageErreur } from "@/components/ui/champs";
 import ChampPhoto from "@/components/ui/champ-photo";
@@ -15,18 +16,38 @@ import ChampPhoto from "@/components/ui/champ-photo";
  * hiding a button is not access control.
  */
 
+/** Une ligne de piece en cours de saisie : le montant est du texte tant que le doigt tape. */
+type SaisiePiece = { designation: string; dinars: string };
+
 type Props = {
   interventionId: string;
   statut: string;
+  /** Sert à annoncer le tarif de base au moment de clôturer. */
+  typePanne: string;
 };
 
-export default function ActionsTechnicien({ interventionId, statut }: Props) {
+export default function ActionsTechnicien({
+  interventionId,
+  statut,
+  typePanne,
+}: Props) {
   const router = useRouter();
   const [erreur, setErreur] = useState<string | null>(null);
   const [enCours, setEnCours] = useState(false);
   const [rapportOuvert, setRapportOuvert] = useState(false);
   const [rapport, setRapport] = useState("");
   const [photo, setPhoto] = useState<string | null>(null);
+  const [pieces, setPieces] = useState<SaisiePiece[]>([]);
+
+  const tarifBase = tarifDe(typePanne);
+  const piecesRetenues = pieces
+    .map((p) => ({
+      designation: p.designation.trim(),
+      montant: dinarsEnMillimes(Number(p.dinars.replace(",", "."))),
+    }))
+    .filter((p) => p.designation !== "" && Number.isFinite(p.montant) && p.montant > 0);
+  const totalFacture =
+    tarifBase + piecesRetenues.reduce((s, p) => s + p.montant, 0);
 
   async function appeler(chemin: string, corps?: unknown) {
     setErreur(null);
@@ -52,6 +73,7 @@ export default function ActionsTechnicien({ interventionId, statut }: Props) {
     setRapportOuvert(false);
     setRapport("");
     setPhoto(null);
+    setPieces([]);
     router.refresh();
     return true;
   }
@@ -96,6 +118,106 @@ export default function ActionsTechnicien({ interventionId, statut }: Props) {
           />
         </div>
 
+        {/* Facturation ------------------------------------------------------
+            Le tarif du deplacement est affiche, pas saisi : il a ete annonce a
+            l'abonne quand il a declare sa panne, le technicien ne le renegocie
+            pas sur place. Seules les pieces s'ajoutent. */}
+        <div className="mt-5 rounded-net border border-trait bg-ivoire p-3">
+          <p className="text-sm font-medium text-nuit">Facture de l’abonné</p>
+
+          <div className="mt-2 flex justify-between gap-4 text-sm">
+            <span className="text-ardoise">
+              Déplacement — {libelleTypePanne(typePanne)}
+            </span>
+            <span className="tabulaire text-nuit">
+              {formaterMontant(tarifBase)}
+            </span>
+          </div>
+
+          {pieces.map((piece, index) => (
+            <div key={index} className="mt-2 flex flex-wrap items-end gap-2">
+              <div className="min-w-0 flex-1">
+                <label
+                  htmlFor={`piece-${interventionId}-${index}`}
+                  className="sr-only"
+                >
+                  Désignation de la pièce {index + 1}
+                </label>
+                <input
+                  id={`piece-${interventionId}-${index}`}
+                  value={piece.designation}
+                  onChange={(e) =>
+                    setPieces((liste) =>
+                      liste.map((p, i) =>
+                        i === index ? { ...p, designation: e.target.value } : p,
+                      ),
+                    )
+                  }
+                  maxLength={80}
+                  placeholder="Pièce remplacée (ex. jarretière SC/APC 3 m)"
+                  className="w-full rounded-net border border-trait bg-white px-3 py-2 text-sm text-nuit placeholder:text-brume focus:border-signal focus:outline-none"
+                />
+              </div>
+              <div className="w-28">
+                <label
+                  htmlFor={`montant-${interventionId}-${index}`}
+                  className="sr-only"
+                >
+                  Montant de la pièce {index + 1}, en dinars
+                </label>
+                <input
+                  id={`montant-${interventionId}-${index}`}
+                  value={piece.dinars}
+                  onChange={(e) =>
+                    setPieces((liste) =>
+                      liste.map((p, i) =>
+                        i === index ? { ...p, dinars: e.target.value } : p,
+                      ),
+                    )
+                  }
+                  inputMode="decimal"
+                  placeholder="0,000"
+                  className="w-full rounded-net border border-trait bg-white px-3 py-2 text-right text-sm text-nuit tabulaire placeholder:text-brume focus:border-signal focus:outline-none"
+                />
+              </div>
+              <Bouton
+                taille="petit"
+                variante="discret"
+                onClick={() =>
+                  setPieces((liste) => liste.filter((_, i) => i !== index))
+                }
+              >
+                Retirer
+              </Bouton>
+            </div>
+          ))}
+
+          {pieces.length < 10 && (
+            <div className="mt-3">
+              <Bouton
+                taille="petit"
+                variante="secondaire"
+                onClick={() =>
+                  setPieces((liste) => [...liste, { designation: "", dinars: "" }])
+                }
+              >
+                Ajouter une pièce
+              </Bouton>
+            </div>
+          )}
+
+          <div className="mt-3 flex justify-between gap-4 border-t border-trait pt-2 text-sm">
+            <span className="font-semibold text-nuit">Total facturé</span>
+            <span className="tabulaire font-display font-bold text-nuit">
+              {formaterMontant(totalFacture)}
+            </span>
+          </div>
+          <p className="mt-1.5 text-xs text-ardoise">
+            La facture part chez l’abonné dès l’enregistrement du rapport. Elle
+            n’est plus modifiable ensuite.
+          </p>
+        </div>
+
         {erreur && (
           <div className="mt-2">
             <MessageErreur>{erreur}</MessageErreur>
@@ -116,9 +238,19 @@ export default function ActionsTechnicien({ interventionId, statut }: Props) {
                 document.getElementById(`rapport-${interventionId}`)?.focus();
                 return;
               }
+              const incompletes = pieces.length - piecesRetenues.length;
+              if (incompletes > 0) {
+                setErreur(
+                  incompletes === 1
+                    ? "Une pièce n’a pas de désignation ou pas de montant. Complétez-la ou retirez-la."
+                    : `${incompletes} pièces n’ont pas de désignation ou pas de montant. Complétez-les ou retirez-les.`,
+                );
+                return;
+              }
               appeler("terminer", {
                 rapport: rapport.trim(),
                 photoRapport: photo,
+                pieces: piecesRetenues,
               });
             }}
           >

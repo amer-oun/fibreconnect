@@ -4,6 +4,7 @@ import {
   ErreurMetier,
   exigerProprieteTechnicien,
 } from "@/lib/interventions";
+import { emettreFacture } from "@/lib/facturation";
 import { rapportSchema } from "@/lib/validations";
 import {
   exigerRoleApi,
@@ -20,7 +21,7 @@ export async function POST(
   try {
     const utilisateur = await exigerRoleApi("TECHNICIEN");
     const { id } = await params;
-    const { rapport, photoRapport } = rapportSchema.parse(
+    const { rapport, photoRapport, pieces } = rapportSchema.parse(
       await lireCorps(requete),
     );
 
@@ -32,7 +33,7 @@ export async function POST(
       throw new ErreurMetier("Profil technicien introuvable.", 404);
     }
 
-    await exigerProprieteTechnicien(id, technicien.id);
+    const { typePanne } = await exigerProprieteTechnicien(id, technicien.id);
 
     await changerStatut({
       interventionId: id,
@@ -45,6 +46,14 @@ export async function POST(
         rapport,
         photoRapport: photoRapport ?? null,
       },
+      // La facture nait avec la cloture, dans la meme transaction : « travaux
+      // faits, rien a payer » n'est pas un etat que l'application accepte.
+      apres: (tx) =>
+        emettreFacture(tx, {
+          interventionId: id,
+          typePanne,
+          pieces,
+        }).then(() => undefined),
     });
 
     return reponseOk({ id });

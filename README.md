@@ -25,6 +25,7 @@ Projet de fin d'études (stage BTP).
 - [Ce que fait l'application](#ce-que-fait-lapplication)
 - [Stack technique](#stack-technique)
 - [Schéma de la base](#schéma-de-la-base)
+- [Facturation et paiement](#facturation-et-paiement)
 - [Installation](#installation)
 - [Identifiants de démonstration](#identifiants-de-démonstration)
 - [Règles métier](#règles-métier)
@@ -40,9 +41,9 @@ Projet de fin d'études (stage BTP).
 
 | Rôle | Ce qu'il peut faire |
 |---|---|
-| **Client** | S'inscrire seul, déclarer une panne avec photo, suivre son avancement étape par étape, l'annuler, noter le technicien une fois l'intervention terminée |
-| **Technicien** | S'inscrire seul (compte à valider), consulter les pannes **de sa zone**, les accepter, les démarrer, rédiger le rapport de clôture avec photo, gérer son profil |
-| **Superviseur** | Piloter l'activité : statistiques, couverture des zones, validation des inscriptions techniciens, attribution des matricules et des zones, affectation manuelle, carte des abonnés |
+| **Client** | S'inscrire seul, déclarer une panne avec photo, suivre son avancement étape par étape, l'annuler, **régler sa facture**, noter le technicien une fois l'intervention terminée |
+| **Technicien** | S'inscrire seul (compte à valider), consulter les pannes **de sa zone**, les accepter, les démarrer, rédiger le rapport de clôture avec photo et les pièces facturées, **encaisser les espèces et les remettre à la société**, gérer son profil |
+| **Superviseur** | Piloter l'activité : statistiques, couverture des zones, validation des inscriptions techniciens, attribution des matricules et des zones, affectation manuelle, carte des abonnés, **finances de la société et paie des techniciens** |
 
 ### Pages
 
@@ -54,16 +55,18 @@ Projet de fin d'études (stage BTP).
 
 /client/dashboard               mes demandes + recherche et filtres
 /client/nouvelle-panne          déclaration, avec photo facultative
-/client/suivi/[id]              timeline, rapport, notation, annulation, impression
+/client/suivi/[id]              timeline, rapport, facture et paiement, notation
 /client/profil                  coordonnées, zone, mot de passe
 
 /technicien/dashboard           pannes de la zone couverte
-/technicien/mes-interventions   accepter / démarrer / terminer
+/technicien/mes-interventions   accepter / démarrer / terminer + pièces facturées
+/technicien/caisse              factures à encaisser, espèces détenues, remises
 /technicien/historique          interventions passées, rapports, notes
 /technicien/profil              photo, spécialité, disponibilité, mot de passe
 
 /superviseur/dashboard          statistiques, graphiques, couverture des zones
 /superviseur/interventions      affectation, réaffectation, annulation
+/superviseur/finances           encaissements, remises à confirmer, paie
 /superviseur/techniciens        équipe par zone, validation, activation
 /superviseur/techniciens/nouveau  création d'un compte technicien
 /superviseur/techniciens/[id]   fiche, validation, changement de zone, journal
@@ -92,10 +95,14 @@ Projet de fin d'études (stage BTP).
 
 ## Schéma de la base
 
-Six tables. SQLite ne supportant pas les `enum` Prisma, les champs `role`,
-`statutCompte`, `statut`, `priorite`, `typePanne` et `zone` sont des `String`
-dont les valeurs autorisées sont centralisées dans `lib/constants.ts` et
-validées par zod à chaque écriture.
+Dix tables : six pour l'activité, quatre pour l'argent. SQLite ne supportant pas
+les `enum` Prisma, les champs `role`, `statutCompte`, `statut`, `priorite`,
+`typePanne`, `zone`, `moyen` et les statuts de facture, de paiement et de
+versement sont des `String` dont les valeurs autorisées sont centralisées dans
+`lib/constants.ts` et validées par zod à chaque écriture.
+
+**Tous les montants sont des entiers en millimes** (1 DT = 1000 millimes),
+jamais des décimaux — voir [Facturation et paiement](#facturation-et-paiement).
 
 Noter qu'aucune relation ne relie `Operateur` à `Technicien` : c'est la
 traduction dans le schéma du fait que les techniciens sont des employés de
@@ -111,6 +118,12 @@ erDiagram
     Technicien  ||--o{ Intervention : "traite"
     Technicien  ||--o{ Historique : "agit"
     Intervention ||--o{ Historique : "journalise"
+    Intervention ||--o| Facture : "émet à la clôture"
+    Facture     ||--o{ LigneFacture : "détaille"
+    Facture     ||--o{ Paiement : "réglée par"
+    Technicien  ||--o{ Paiement : "encaisse en espèces"
+    Technicien  ||--o{ Versement : "remet"
+    Versement   ||--o{ Paiement : "regroupe"
 
     Utilisateur {
         string   id PK
@@ -150,6 +163,8 @@ erDiagram
         string  zone "gouvernorat - regle centrale"
         boolean disponible "defaut true"
         string  photoUrl "nullable"
+        int     salaireBase "millimes - defaut 800000"
+        float   tauxCommission "defaut 0.15"
     }
 
     Intervention {
@@ -180,6 +195,47 @@ erDiagram
         datetime dateAction
         string   commentaire "nullable"
     }
+
+    Facture {
+        string   id PK
+        string   interventionId FK "unique"
+        string   numero UK "FC-2026-0007"
+        int      montantTotal "millimes"
+        string   statut "A_PAYER|PAYEE|ANNULEE"
+        datetime dateEmission
+        datetime datePaiement "nullable"
+    }
+
+    LigneFacture {
+        string id PK
+        string factureId FK
+        string designation
+        int    montant "millimes"
+    }
+
+    Paiement {
+        string   id PK
+        string   factureId FK
+        int      montant "millimes"
+        string   moyen "ESPECES|CARTE|VIREMENT|D17"
+        string   statut "EN_ATTENTE|CONFIRME|ECHOUE"
+        string   reference UK "anti-rejeu"
+        string   technicienId FK "nullable - especes seulement"
+        string   versementId FK "nullable"
+        datetime dateCreation
+        datetime dateConfirmation "nullable"
+    }
+
+    Versement {
+        string   id PK
+        string   technicienId FK
+        int      montant "millimes"
+        string   statut "EN_ATTENTE|CONFIRME"
+        string   commentaire "nullable"
+        datetime dateCreation
+        datetime dateConfirmation "nullable"
+        string   confirmePar "nullable"
+    }
 ```
 
 ### Valeurs autorisées
@@ -192,12 +248,132 @@ erDiagram
 | `priorite` | `BASSE`, `NORMALE`, `HAUTE`, `URGENTE` |
 | `typePanne` | `COUPURE_TOTALE`, `DEBIT_FAIBLE`, `ONT_DEFECTUEUX`, `CABLE_ENDOMMAGE`, `NOUVELLE_INSTALLATION`, `CHANGEMENT_ROUTEUR`, `AUTRE` |
 | `zone` | `Tunis`, `Ariana`, `Ben Arous`, `Manouba`, `Nabeul`, `Bizerte`, `Sousse`, `Monastir`, `Sfax` |
+| `moyen` | `ESPECES`, `CARTE`, `VIREMENT`, `D17` |
+| `Facture.statut` | `A_PAYER`, `PAYEE`, `ANNULEE` |
+| `Paiement.statut` | `EN_ATTENTE`, `CONFIRME`, `ECHOUE` |
+| `Versement.statut` | `EN_ATTENTE`, `CONFIRME` |
 
 **Pourquoi une liste fermée de gouvernorats et non la ville.** Comparer des
 villes laisserait un abonné de « La Marsa » invisible pour le technicien qui
 couvre « Tunis », et une simple faute de frappe masquerait une panne pour tout
 le monde — sans message d'erreur, ce qui est la pire façon pour une règle
 d'aiguillage d'échouer.
+
+---
+
+## Facturation et paiement
+
+### Qui doit quoi à qui
+
+**L'abonné doit à la société, jamais au technicien.** Le technicien est un
+salarié : il ne vend rien, il exécute. Cette phrase décide de toute
+l'architecture financière de l'application.
+
+```
+                 ┌──────────────────────────────────────────┐
+                 │  carte · virement · D17                  │
+   Abonné ───────┼─────────────────────────────▶  Société   │
+                 │                                     ▲    │
+                 │  espèces                            │    │
+                 └──────▶  Technicien  ──── remise ────┘    │
+                                 ▲                          │
+                                 └──── fixe + commission ────┘
+```
+
+Les espèces sont le seul cas où l'argent transite par quelqu'un. Le technicien
+qui encaisse 120 DT sur le trottoir ne les a pas gagnés : il les **détient pour
+le compte de la société**, et cette dette ne s'éteint qu'au moment où le
+superviseur accuse réception de la remise.
+
+### Les quatre moyens de paiement
+
+| Moyen | Qui reçoit | Confirmation |
+|---|---|---|
+| Espèces au technicien | le technicien, pour le compte de la société | immédiate — l'argent a changé de main |
+| Carte bancaire | la société | immédiate (passerelle) |
+| D17 / e-Dinar | la société | immédiate (passerelle) |
+| Virement bancaire | la société | **par le superviseur**, relevé bancaire en main |
+
+Un virement annoncé n'est pas un virement reçu. L'abonné ne peut pas confirmer
+le sien : la route API le refuse explicitement (403). Solder une facture sur
+simple déclaration serait la faille la plus facile à exploiter de toute
+l'application.
+
+### La passerelle de paiement est simulée, et le dit
+
+Aucun argent ne circule dans cette version. **Stripe n'accepte pas les comptes
+marchands tunisiens**, et les prestataires locaux — Paymee, Flouci — demandent
+un contrat signé qu'un projet d'études n'a pas les moyens d'obtenir. L'écran de
+paiement affiche donc « Passerelle de paiement — simulation » : une fausse page
+bancaire qui se ferait passer pour vraie serait la seule chose malhonnête de ce
+projet.
+
+Ce qui est conservé, c'est la **forme** d'une vraie passerelle : une intention
+de paiement (`ouvrirPaiement`), puis une confirmation séparée
+(`confirmerPaiement`). Le jour où un prestataire est raccordé, la confirmation
+arrive d'un webhook au lieu d'un bouton, et rien d'autre ne change. Si le
+paiement avait été enregistré en un seul appel, tout le flux serait à réécrire.
+
+Le champ `Paiement.reference` est `@unique` : une notification rejouée par la
+passerelle — ce qui arrive en production — ne compte pas l'encaissement deux
+fois. Un test le vérifie en confirmant trois fois de suite.
+
+### La facture naît avec la clôture
+
+La facture est émise **dans la transaction même** qui passe l'intervention en
+`TERMINEE` (paramètre `apres` de `changerStatut`). Une intervention terminée a
+donc toujours exactement une facture. « Travaux faits, rien à payer » est un
+état qu'aucune des deux parties ne saurait interpréter : il ne doit pas pouvoir
+exister, même une seconde. Un test provoque un échec de facturation et vérifie
+que l'intervention reste `EN_COURS`.
+
+La première ligne est le déplacement, au tarif publié du type de panne — celui
+qui a été annoncé à l'abonné quand il a déclaré sa panne, pas découvert à la
+fin. Le technicien ajoute ensuite les pièces remplacées, une par ligne, au
+moment de rédiger son rapport.
+
+| Type de panne | Tarif |
+|---|---|
+| Coupure totale | 80,000 DT |
+| Débit faible | 60,000 DT |
+| ONT défectueux | 120,000 DT |
+| Câble endommagé | 150,000 DT |
+| Nouvelle installation | 250,000 DT |
+| Changement de routeur | 100,000 DT |
+| Autre | 70,000 DT |
+
+### Les montants sont des entiers de millimes
+
+1 dinar = 1000 millimes. **Aucun montant n'est un décimal** dans cette
+application : ni en base, ni en mémoire, ni dans les calculs. En JavaScript,
+aujourd'hui encore :
+
+```js
+0.1 + 0.2 === 0.30000000000000004
+```
+
+Sur une facture, personne ne le voit. Sur une paie mensuelle qui additionne deux
+cents commissions, le total cesse de correspondre à la somme des lignes
+affichées au-dessus — et cela ne s'explique pas à un comptable. Les entiers
+s'additionnent exactement, donc un total est toujours la somme de ce qui est
+imprimé. SQLite n'a de toute façon pas de type décimal.
+
+`lib/monnaie.ts` contient les seules fonctions autorisées à transformer un
+montant en texte : `formaterMontant` (trois décimales, toujours) et
+`formaterMontantCourt` (pour les graphiques).
+
+### La rémunération du technicien
+
+**Fixe + commission** : un salaire de base mensuel (800 DT par défaut) plus un
+pourcentage du montant facturé (15 % par défaut), tous deux réglables par
+technicien. La commission porte sur les interventions **terminées** dans le
+mois, réglées ou non : le travail a été fait, et le recouvrement est l'affaire
+de la société, pas celle du technicien.
+
+Les espèces détenues sont affichées **à côté** de la paie, jamais déduites.
+Mélanger « ce que nous vous devons » et « ce que vous détenez pour nous » dans
+un seul nombre produit un chiffre sur lequel aucune des deux parties ne peut
+agir — on ne rend pas la moitié d'un salaire.
 
 ---
 
@@ -269,7 +445,8 @@ Mot de passe commun à tous les comptes : **`Passer123`**
 | Client | `hatem.zouari@example.tn` | Ooredoo | Sfax (Sfax) |
 
 Le jeu de données contient 2 opérateurs, 12 utilisateurs, 33 interventions
-réparties sur 6 mois et 106 lignes d'historique.
+réparties sur 6 mois, 106 lignes d'historique, 21 factures, 18 règlements et
+4 remises d'espèces.
 
 Deux détails du jeu de données sont volontaires et servent la démonstration :
 
@@ -278,6 +455,13 @@ Deux détails du jeu de données sont volontaires et servent la démonstration :
 - **Rania est en zone Sousse, que personne ne couvre.** Sa panne n'apparaît
   chez aucun technicien, et le tableau de bord du superviseur l'affiche en
   alerte. Créez un technicien sur Sousse, ou affectez la panne à la main.
+- **Quatre factures restent impayées et un virement reste annoncé.** Sans
+  elles, l'écran de paiement du client, celui d'encaissement du technicien et
+  la file de confirmation du superviseur se démontreraient vides — ce qui
+  n'apprend rien à personne.
+- **Quatre techniciens détiennent encore des espèces, un cinquième a déjà
+  déclaré sa remise.** Les deux moitiés du circuit de l'argent liquide sont
+  donc visibles en même temps.
 
 La page `/login` affiche ces comptes dans un panneau dépliant. Passez
 `NEXT_PUBLIC_MODE_DEMO="false"` dans `.env` pour le masquer en production.
@@ -292,11 +476,52 @@ La page `/login` affiche ces comptes dans un panneau dépliant. Passez
 3. Connectez-vous en **technicien de Sfax** (`amine.jlassi@…`) : cette même
    panne n'apparaît **jamais**, l'abonné n'étant pas dans sa zone. C'est la
    règle centrale du projet.
-4. Revenez en **client** : la timeline montre chaque étape, et vous pouvez noter
-   l'intervention.
+4. Revenez en **client** : la timeline montre chaque étape, la facture apparaît
+   sous le rapport, et vous pouvez noter l'intervention.
 5. Connectez-vous en **superviseur** pour voir les statistiques mises à jour,
    l'alerte sur la zone de Sousse, réaffecter une intervention ou désactiver
    un compte technicien.
+
+### Scénario de démonstration du paiement
+
+Le circuit de l'argent se démontre en trois connexions, sans rien préparer.
+
+**Par carte, du côté de l'abonné.**
+
+1. Connectez-vous en client `slim.ferchichi@example.tn` : deux de ses
+   interventions terminées ont une facture non soldée.
+2. Ouvrez le suivi de l'une d'elles : la facture est détaillée ligne par ligne
+   sous le rapport du technicien.
+3. Choisissez « Carte bancaire », puis « Payer ». L'écran de la passerelle
+   simulée s'affiche, annonce qu'aucun argent ne circule, et attend votre
+   confirmation. Confirmez : la facture passe en « Payée » et le règlement
+   s'ajoute au bas de la facture avec sa référence.
+
+**En espèces, du côté du technicien.**
+
+4. Connectez-vous en technicien `mehdi.gharbi@fibreconnect.tn` (FC-003) et
+   ouvrez « Ma caisse » : la facture restante de Slim y figure.
+5. « Encaisser en espèces », le montant est déjà rempli. Validez : la facture
+   est soldée, et l'indicateur « Espèces en main » augmente d'autant. Cet
+   argent est désormais **dû par le technicien à la société**.
+6. « Déclarer la remise » : les espèces quittent la ligne « en main » et
+   passent en attente d'accusé de réception.
+
+**Du côté du superviseur.**
+
+7. Connectez-vous en superviseur, page **Finances**. La remise de Mehdi attend
+   votre accusé de réception, et un virement annoncé attend d'être pointé sur
+   le relevé bancaire.
+8. Accusez réception de la remise : elle passe en « Reçue par la société » et
+   l'indicateur « Espèces chez les techniciens » baisse.
+9. Confirmez le virement : la facture correspondante se solde.
+10. En bas de page, le tableau de paie montre pour chaque technicien son fixe,
+    sa commission sur ce qu'il a facturé ce mois-ci, et — dans une colonne
+    séparée, jamais déduite — les espèces qu'il détient encore.
+
+Essayez aussi de confirmer un virement **depuis le compte de l'abonné** : la
+route le refuse. C'est la société qui constate l'arrivée de l'argent, pas
+celui qui prétend l'avoir envoyé.
 
 ### Démonstration de l'inscription technicien
 
@@ -345,10 +570,23 @@ La page `/login` affiche ces comptes dans un panneau dépliant. Passez
 10. La zone d'un technicien n'est pas dans le profil qu'il modifie lui-même :
     elle décide des pannes qui lui sont proposées, la choisir reviendrait à
     choisir son travail. Seul le superviseur la change.
+11. La clôture émet la facture **dans la même transaction**. Une intervention
+    terminée a toujours exactement une facture, et une facture n'existe pas sans
+    intervention terminée.
+12. Une facture n'est soldée que par des paiements **confirmés**. Un virement
+    annoncé ne réduit rien tant que le superviseur ne l'a pas vu sur le relevé,
+    et l'abonné ne peut pas confirmer le sien.
+13. Les espèces encaissées par un technicien créent une dette de celui-ci envers
+    la société. Elle s'éteint en deux temps volontairement distincts : le
+    technicien **déclare** la remise, le superviseur **accuse réception**.
+    Confondre les deux reviendrait à croire sur parole un mouvement d'espèces.
+14. Le montant d'une remise n'est jamais envoyé par le client : il est calculé
+    côté serveur à partir des encaissements non encore versés. Un champ libre
+    permettrait de déclarer 200 DT en en gardant 400.
 
 ### Ces règles sont testées
 
-`npm test` exécute 50 tests.
+`npm test` exécute 71 tests.
 
 Les 25 premiers portent sur les règles métier et tournent contre une base
 SQLite jetable, construite à partir des vraies migrations : cycle complet des
@@ -371,9 +609,23 @@ limiteur reçoit l'instant courant en paramètre, si bien qu'une fenêtre de
 quinze minutes se vérifie en quelques microsecondes et que le résultat ne
 dépend jamais de la vitesse de la machine.
 
-Les 13 derniers portent sur la pagination : qu'aucune ligne ne soit sautée ni
+13 autres portent sur la pagination : qu'aucune ligne ne soit sautée ni
 comptée deux fois en parcourant toutes les pages, qu'une URL bricolée à la main
 retombe sur une page valide, et que les liens de page conservent les filtres.
+
+Les 21 derniers portent sur l'argent, et vérifient qu'on ne peut ni en créer ni
+en perdre par les chemins que l'application propose :
+
+- une confirmation de paiement **rejouée trois fois** ne compte l'encaissement
+  qu'une seule fois ;
+- un virement `EN_ATTENTE` ne solde rien ;
+- on ne peut pas encaisser plus que le reste dû, ni ouvrir un paiement sur une
+  facture déjà soldée, ni payer en espèces depuis l'espace client ;
+- si la facturation échoue, la clôture est annulée et l'intervention reste
+  `EN_COURS` — jamais de travaux sans facture ;
+- un total de facture est **exactement** la somme des lignes affichées ;
+- une remise déclarée deux fois est refusée, un accusé de réception donné deux
+  fois aussi.
 
 ### Traçabilité
 
@@ -403,6 +655,7 @@ components/
   ui/                      badges, boutons, champs, surfaces, squelettes
   navigation/              coquille applicative, rail latéral, notifications
   interventions/           lignes de liste, filtres, actions métier
+  facturation/             facture, paiement, encaissement, remises
   graphiques/              graphiques recharts du superviseur
   carte/                   carte Leaflet (chargée côté navigateur uniquement)
   timeline-intervention.tsx  élément signature
@@ -410,6 +663,8 @@ lib/
   constants.ts             valeurs autorisées, libellés, couleurs de statut
   prisma.ts                singleton du client Prisma
   interventions.ts         changerStatut() et contrôles de propriété
+  facturation.ts           émission, solde, encaissement, remises, paie
+  monnaie.ts               montants en millimes, jamais en décimaux
   validations.ts           schémas zod
   session.ts               exigerRole(), utilisateurConnecte()
   api.ts                   réponses et gestion d'erreurs communes
@@ -460,6 +715,11 @@ utilisé que pour les formulaires, les graphiques, la carte et les quelques
   est vérifié sur les octets du fichier, pas sur son extension.
 - **Redirection ouverte** empêchée : le paramètre `callbackUrl` n'est accepté
   que s'il désigne un chemin interne.
+- **Argent.** Aucun montant ne vient du navigateur : le reste à payer est
+  toujours recalculé côté serveur, le montant d'une remise est déduit des
+  encaissements en base, et un technicien ne peut encaisser que sur les
+  factures de ses propres interventions (403 sinon). La référence d'un paiement
+  est unique, ce qui rend une notification rejouée sans effet.
 - **Erreurs techniques** journalisées côté serveur et jamais renvoyées au
   navigateur.
 
@@ -637,3 +897,20 @@ ne fuit — seul le code HTTP est inexact.
 **SQLite et disque local.** Le cahier des charges impose SQLite ; la base est un
 fichier et les photos sont à côté. Un hébergement au système de fichiers
 éphémère perdrait les deux à chaque redémarrage.
+
+**Aucun paiement réel n'est encaissé.** La passerelle est simulée et l'écran le
+dit. Stripe n'accepte pas les comptes marchands tunisiens ; brancher Paymee ou
+Flouci demande un contrat commercial signé. Le découpage en deux temps
+(`ouvrirPaiement` puis `confirmerPaiement`, dans `lib/facturation.ts`) est
+précisément celui qu'attendent ces prestataires : la confirmation viendrait
+d'un webhook au lieu d'un bouton.
+
+**Une facture émise n'est pas modifiable, et pas annulable depuis l'interface.**
+Le statut `ANNULEE` existe en base et est traité partout dans les calculs, mais
+aucun écran ne le déclenche encore. Une facture erronée se corrige aujourd'hui
+en base. Le geste juste — un avoir, qui laisse la facture d'origine intacte —
+demande une table de plus.
+
+**La paie est un calcul, pas un versement.** Le tableau montre ce que la société
+doit à chaque technicien pour le mois ; rien n'enregistre qu'elle l'a payé. Il
+manque à la rémunération le pendant du `Versement` qui existe pour les espèces.
