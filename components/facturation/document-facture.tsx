@@ -54,7 +54,9 @@ export default function DocumentFacture({
       {/* En-tête ---------------------------------------------------------- */}
       <header className="flex flex-wrap items-start justify-between gap-6 border-b-2 border-nuit pb-6">
         <div>
-          <Marque href="/client/dashboard" />
+          {/* `sombre={false}` : le document est sur fond blanc, contrairement
+              au rail de navigation pour lequel le logotype a été dessiné. */}
+          <Marque href="/client/dashboard" sombre={false} />
           <address className="mt-3 text-xs leading-relaxed text-ardoise not-italic">
             {raisonSociale}
             <br />

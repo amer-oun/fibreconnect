@@ -30,7 +30,12 @@ export function Marque({
         <circle cx="12" cy="7" r="3.2" fill="#22D3EE" />
       </svg>
       <span className="font-semibold">
-        Fibre<span className="text-signal">Connect</span>
+        Fibre
+        {/* Le cyan de marque n'a assez de contraste que sur fond sombre : sur
+            fond clair il passe au cyan profond, comme le reste des accents. */}
+        <span className={sombre ? "text-signal" : "text-signal-profond"}>
+          Connect
+        </span>
       </span>
     </Link>
   );

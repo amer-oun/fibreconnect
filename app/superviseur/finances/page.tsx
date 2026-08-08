@@ -363,7 +363,7 @@ export default async function PageFinances({
                           {f.intervention.technicien?.matricule ?? "non assignée"}
                         </span>
                       </td>
-                      <td className="px-4 py-3 text-right tabulaire font-semibold text-nuit">
+                      <td className="px-4 py-3 text-right tabulaire whitespace-nowrap font-semibold text-nuit">
                         {formaterMontant(soldes.get(f.id) ?? f.montantTotal)}
                       </td>
                     </tr>
@@ -461,25 +461,25 @@ export default async function PageFinances({
                         {ligne.matricule ?? "—"} · {ligne.zone}
                       </span>
                     </td>
-                    <td className="px-4 py-3 text-right tabulaire text-ardoise">
+                    <td className="px-4 py-3 text-right tabulaire whitespace-nowrap text-ardoise">
                       {ligne.interventions}
                     </td>
-                    <td className="px-4 py-3 text-right tabulaire text-ardoise">
+                    <td className="px-4 py-3 text-right tabulaire whitespace-nowrap text-ardoise">
                       {formaterMontant(ligne.chiffreAffaires)}
                     </td>
-                    <td className="px-4 py-3 text-right tabulaire text-ardoise">
+                    <td className="px-4 py-3 text-right tabulaire whitespace-nowrap text-ardoise">
                       {formaterMontant(ligne.salaireBase)}
                     </td>
-                    <td className="px-4 py-3 text-right tabulaire text-ardoise">
+                    <td className="px-4 py-3 text-right tabulaire whitespace-nowrap text-ardoise">
                       {formaterMontant(ligne.commission)}
                       <span className="ml-1 text-xs text-brume">
                         {Math.round(ligne.tauxCommission * 100)} %
                       </span>
                     </td>
-                    <td className="px-4 py-3 text-right tabulaire font-semibold text-nuit">
+                    <td className="px-4 py-3 text-right tabulaire whitespace-nowrap font-semibold text-nuit">
                       {formaterMontant(ligne.total)}
                     </td>
-                    <td className="px-4 py-3 text-right tabulaire text-ardoise">
+                    <td className="px-4 py-3 text-right tabulaire whitespace-nowrap text-ardoise">
                       {ligne.especesEnMain > 0
                         ? formaterMontant(ligne.especesEnMain)
                         : "—"}

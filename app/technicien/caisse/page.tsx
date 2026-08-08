@@ -4,9 +4,13 @@ import Link from "next/link";
 import { prisma } from "@/lib/prisma";
 import { exigerRole } from "@/lib/session";
 import { ACCENTS, STATUT_VERSEMENT_LABELS, libelleTypePanne } from "@/lib/constants";
-import { formaterMontant, partDe } from "@/lib/monnaie";
-import { formaterDateHeure } from "@/lib/dates";
-import { especesEnMain, restesAPayer } from "@/lib/facturation";
+import { formaterMontant } from "@/lib/monnaie";
+import { bornesDuMois, formaterDateHeure } from "@/lib/dates";
+import {
+  especesEnMain,
+  paieDuMois,
+  restesAPayer,
+} from "@/lib/facturation";
 import {
   EntetePage,
   EtatVide,
@@ -53,14 +57,18 @@ export default async function PageCaisse() {
     );
   }
 
-  const maintenant = new Date();
-  const debutDuMois = new Date(
-    maintenant.getFullYear(),
-    maintenant.getMonth(),
-    1,
-  );
+  /*
+   * La rémunération vient de `paieDuMois`, la même fonction que la page
+   * Finances du superviseur — jamais d'un calcul refait ici.
+   *
+   * Ce fut d'abord un second calcul, et il a divergé le jour où la TVA est
+   * arrivée : la commission portait encore sur le TTC côté technicien et déjà
+   * sur le hors-taxes côté superviseur. Deux écrans qui annoncent deux salaires
+   * différents pour le même mois sont pires que pas d'écran du tout.
+   */
+  const { debut: debutDuMois, fin: finDuMois } = bornesDuMois(null);
 
-  const [aEncaisser, versements, facturesDuMois, enMain] = await Promise.all([
+  const [aEncaisser, versements, paie, enMain] = await Promise.all([
     // Factures de ses interventions qui ne sont pas soldees.
     prisma.facture.findMany({
       where: {
@@ -101,23 +109,18 @@ export default async function PageCaisse() {
         dateConfirmation: true,
       },
     }),
-    prisma.facture.findMany({
-      where: {
-        statut: { not: "ANNULEE" },
-        intervention: {
-          technicienId: technicien.id,
-          statut: "TERMINEE",
-          dateFin: { gte: debutDuMois },
-        },
-      },
-      select: { montantTotal: true },
-    }),
+    paieDuMois(debutDuMois, finDuMois),
     especesEnMain(technicien.id),
   ]);
 
   const soldes = await restesAPayer(prisma, aEncaisser);
-  const chiffreAffaires = facturesDuMois.reduce((s, f) => s + f.montantTotal, 0);
-  const commission = partDe(chiffreAffaires, technicien.tauxCommission);
+
+  // Sa propre ligne dans la paie du mois. Absente si son compte vient d'être
+  // validé et qu'aucune paie ne le concerne encore.
+  const ligne = paie.find((l) => l.technicienId === technicien.id);
+  const chiffreAffaires = ligne?.chiffreAffaires ?? 0;
+  const commission = ligne?.commission ?? 0;
+  const remuneration = ligne?.total ?? technicien.salaireBase;
 
   return (
     <div className="mx-auto w-full max-w-5xl px-4 py-8 sm:px-6">
@@ -139,19 +142,23 @@ export default async function PageCaisse() {
         <Indicateur
           libelle="Facturé ce mois-ci"
           valeur={formaterMontant(chiffreAffaires)}
-          precision={`${facturesDuMois.length} intervention${facturesDuMois.length > 1 ? "s" : ""} terminée${facturesDuMois.length > 1 ? "s" : ""}`}
+          precision={`hors taxes · ${ligne?.interventions ?? 0} intervention${(ligne?.interventions ?? 0) > 1 ? "s" : ""} terminée${(ligne?.interventions ?? 0) > 1 ? "s" : ""}`}
           accent={ACCENTS.info}
         />
         <Indicateur
           libelle="Commission"
           valeur={formaterMontant(commission)}
-          precision={`${Math.round(technicien.tauxCommission * 100)} % du montant facturé`}
+          precision={`${Math.round(technicien.tauxCommission * 100)} % du montant facturé hors taxes`}
           accent={ACCENTS.signal}
         />
         <Indicateur
           libelle="Rémunération du mois"
-          valeur={formaterMontant(technicien.salaireBase + commission)}
-          precision={`Fixe ${formaterMontant(technicien.salaireBase)} + commission`}
+          valeur={formaterMontant(remuneration)}
+          precision={
+            ligne?.bulletin
+              ? `Versée le ${formaterDateHeure(ligne.bulletin.dateVersement)}`
+              : `Fixe ${formaterMontant(technicien.salaireBase)} + commission`
+          }
           accent={ACCENTS.succes}
         />
       </div>
