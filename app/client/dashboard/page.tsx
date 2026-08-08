@@ -14,8 +14,10 @@ import {
   construireFiltreIntervention,
   type ParametresRecherche,
 } from "@/lib/filtres";
+import { calculerPagination, lirePage } from "@/lib/pagination";
 import { EntetePage, EtatVide, Indicateur, Panneau } from "@/components/ui/surfaces";
 import { LienBouton } from "@/components/ui/bouton";
+import Pagination from "@/components/ui/pagination";
 import BarreFiltres from "@/components/interventions/barre-filtres";
 import LigneIntervention from "@/components/interventions/ligne-intervention";
 
@@ -45,12 +47,22 @@ export default async function TableauDeBordClient({
     );
   }
 
+  const filtreSql = {
+    AND: [{ clientId: client.id }, construireFiltreIntervention(parametres)],
+  };
+
+  // Le total conditionne les bornes de la requête : il se compte d'abord.
+  const pagination = calculerPagination(
+    await prisma.intervention.count({ where: filtreSql }),
+    lirePage(parametres),
+  );
+
   const [interventions, compteurs, impayees] = await Promise.all([
     prisma.intervention.findMany({
-      where: {
-        AND: [{ clientId: client.id }, construireFiltreIntervention(parametres)],
-      },
+      where: filtreSql,
       orderBy: { dateCreation: "desc" },
+      skip: pagination.skip,
+      take: pagination.take,
       select: selectionListe,
     }),
     prisma.intervention.groupBy({
@@ -83,7 +95,7 @@ export default async function TableauDeBordClient({
     (parStatut.ASSIGNEE ?? 0) +
     (parStatut.EN_COURS ?? 0);
   const total = compteurs.reduce((somme, c) => somme + c._count, 0);
-  const filtre = Object.keys(parametres).length > 0;
+  const filtre = Object.keys(parametres).some((cle) => cle !== "page");
 
   return (
     <div className="mx-auto w-full max-w-5xl px-4 py-8 sm:px-6">
@@ -186,6 +198,13 @@ export default async function TableauDeBordClient({
           </div>
         )}
       </Panneau>
+
+      <Pagination
+        chemin="/client/dashboard"
+        parametres={parametres}
+        etat={pagination}
+        nom="demandes"
+      />
     </div>
   );
 }

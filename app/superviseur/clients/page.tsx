@@ -3,6 +3,9 @@ import type { Metadata } from "next";
 import { prisma } from "@/lib/prisma";
 import { exigerRole } from "@/lib/session";
 import { ACCENTS } from "@/lib/constants";
+import { calculerPagination, lirePage } from "@/lib/pagination";
+import type { ParametresRecherche } from "@/lib/filtres";
+import Pagination from "@/components/ui/pagination";
 import { EntetePage, EtatVide, Indicateur, Panneau, TitrePanneau } from "@/components/ui/surfaces";
 import BoutonImpression from "@/components/ui/bouton-impression";
 import CarteClients from "@/components/carte/carte-clients";
@@ -15,11 +18,28 @@ const COULEURS_OPERATEUR: Record<string, string> = {
   Ooredoo: "#B45309",
 };
 
-export default async function ClientsSuperviseur() {
-  await exigerRole("SUPERVISEUR");
+/** Statuts qui comptent comme « intervention ouverte ». */
+const OUVERTES = { statut: { in: ["NOUVELLE", "ASSIGNEE", "EN_COURS"] } };
 
-  const clients = await prisma.client.findMany({
-    orderBy: [{ zone: "asc" }, { ville: "asc" }],
+export default async function ClientsSuperviseur({
+  searchParams,
+}: {
+  searchParams: Promise<ParametresRecherche>;
+}) {
+  await exigerRole("SUPERVISEUR");
+  const parametres = await searchParams;
+
+  /*
+   * Deux requêtes, et c'est volontaire.
+   *
+   * La carte a besoin de **tous** les abonnés — une carte paginée ne veut rien
+   * dire, on y cherche justement ce qui est loin du reste. La liste, elle,
+   * grandit sans limite et se pagine comme les autres.
+   *
+   * Aucune des deux ne charge les interventions entières : le total vient d'un
+   * `_count`, et seules les interventions ouvertes — rares — sont rapportées.
+   */
+  const pourLaCarte = await prisma.client.findMany({
     select: {
       id: true,
       adresse: true,
@@ -29,28 +49,47 @@ export default async function ClientsSuperviseur() {
       latitude: true,
       longitude: true,
       operateur: { select: { nom: true } },
+      utilisateur: { select: { nom: true, prenom: true } },
+      interventions: { where: OUVERTES, select: { id: true } },
+    },
+  });
+
+  const pagination = calculerPagination(
+    pourLaCarte.length,
+    lirePage(parametres),
+  );
+
+  const clients = await prisma.client.findMany({
+    orderBy: [{ zone: "asc" }, { ville: "asc" }],
+    skip: pagination.skip,
+    take: pagination.take,
+    select: {
+      id: true,
+      adresse: true,
+      ville: true,
+      zone: true,
+      numContrat: true,
+      operateur: { select: { nom: true } },
       utilisateur: {
         select: {
           nom: true,
           prenom: true,
           telephone: true,
-          email: true,
           statutCompte: true,
         },
       },
-      interventions: { select: { statut: true } },
+      interventions: { where: OUVERTES, select: { id: true } },
+      _count: { select: { interventions: true } },
     },
   });
 
   const enrichis = clients.map((c) => ({
     ...c,
-    ouvertes: c.interventions.filter((i) =>
-      ["NOUVELLE", "ASSIGNEE", "EN_COURS"].includes(i.statut),
-    ).length,
-    total: c.interventions.length,
+    ouvertes: c.interventions.length,
+    total: c._count.interventions,
   }));
 
-  const points: PointClient[] = enrichis
+  const points: PointClient[] = pourLaCarte
     .filter((c) => c.latitude !== null && c.longitude !== null)
     .map((c) => ({
       id: c.id,
@@ -62,10 +101,10 @@ export default async function ClientsSuperviseur() {
       operateur: c.operateur.nom,
       latitude: c.latitude!,
       longitude: c.longitude!,
-      interventionsOuvertes: c.ouvertes,
+      interventionsOuvertes: c.interventions.length,
     }));
 
-  const zones = new Set(enrichis.map((c) => c.zone));
+  const zones = new Set(pourLaCarte.map((c) => c.zone));
 
   return (
     <div className="mx-auto w-full max-w-6xl px-4 py-8 sm:px-6">
@@ -76,16 +115,18 @@ export default async function ClientsSuperviseur() {
       />
 
       <div className="mb-6 grid grid-cols-2 gap-5 sm:grid-cols-4">
-        <Indicateur libelle="Abonnés" valeur={enrichis.length} />
+        {/* Les chiffres portent sur tous les abonnés, pas sur la page ouverte :
+            un indicateur qui changerait en tournant la page ne mesure rien. */}
+        <Indicateur libelle="Abonnés" valeur={pourLaCarte.length} />
         <Indicateur libelle="Zones desservies" valeur={zones.size} />
         <Indicateur
           libelle="Interventions ouvertes"
-          valeur={enrichis.reduce((s, c) => s + c.ouvertes, 0)}
+          valeur={pourLaCarte.reduce((s, c) => s + c.interventions.length, 0)}
           accent={ACCENTS.attention}
         />
         <Indicateur
           libelle="Localisés"
-          valeur={`${points.length}/${enrichis.length}`}
+          valeur={`${points.length}/${pourLaCarte.length}`}
           accent={ACCENTS.signal}
           precision="coordonnées connues"
         />
@@ -200,6 +241,13 @@ export default async function ClientsSuperviseur() {
             </div>
           )}
         </Panneau>
+
+        <Pagination
+          chemin="/superviseur/clients"
+          parametres={parametres}
+          etat={pagination}
+          nom="abonnés"
+        />
       </div>
     </div>
   );
