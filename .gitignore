@@ -48,3 +48,6 @@ next-env.d.ts
 # prisma (base SQLite locale)
 /prisma/*.db
 /prisma/*.db-journal
+
+# sauvegardes de la base (npm run sauvegarde) : ce sont des donnees, pas du code
+/sauvegardes
