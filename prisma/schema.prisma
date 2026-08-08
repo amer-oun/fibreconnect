@@ -97,8 +97,47 @@ model Technicien {
   historiques   Historique[]
   encaissements Paiement[] // especes encaissees pour le compte de la societe
   versements    Versement[]
+  bulletins     BulletinPaie[]
 
   @@index([zone])
+}
+
+/// Paie effectivement versee a un technicien pour un mois donne.
+///
+/// Le pendant du Versement, dans l'autre sens : le Versement enregistre
+/// l'argent qui remonte du technicien vers la societe, le bulletin celui qui
+/// descend. Sans lui, la paie n'etait qu'un calcul refait chaque fois qu'on
+/// ouvrait la page, et rien n'empechait de payer deux fois le meme mois.
+///
+/// `@@unique([technicienId, mois])` est cette garantie, posee en base et non
+/// dans une verification applicative : c'est le meme role que `reference` sur
+/// Paiement, qui empeche de compter deux fois un encaissement rejoue.
+///
+/// Les montants sont FIGES a l'enregistrement, comme ceux d'une facture a son
+/// emission. Si une facture du mois est corrigee ensuite, la paie deja versee
+/// ne bouge pas : on ne reecrit pas un salaire qui a ete paye.
+model BulletinPaie {
+  id           String @id @default(cuid())
+  technicienId String
+  mois         String // "2026-08"
+
+  // Copie des parametres au moment du versement : le taux ou le fixe peuvent
+  // changer plus tard sans rendre les bulletins passes incomprehensibles.
+  salaireBase     Int
+  tauxCommission  Float
+  interventions   Int // nombre d'interventions terminees dans le mois
+  chiffreAffaires Int
+  commission      Int
+  montantTotal    Int // fixe + commission, en millimes
+
+  dateVersement DateTime @default(now())
+  versePar      String // id du superviseur
+  commentaire   String?
+
+  technicien Technicien @relation(fields: [technicienId], references: [id], onDelete: Cascade)
+
+  @@unique([technicienId, mois])
+  @@index([mois])
 }
 
 /// Une panne declaree par un client, puis prise en charge par un technicien.

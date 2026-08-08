@@ -17,6 +17,7 @@ import {
   ouvrirPaiement,
   paieDuMois,
   resteAPayer,
+  verserPaie,
 } from "@/lib/facturation";
 import { TARIFS } from "@/lib/constants";
 import { dinarsEnMillimes, formaterMontant, partDe } from "@/lib/monnaie";
@@ -46,12 +47,14 @@ afterAll(async () => {
   supprimerBase();
 });
 
-/** Une intervention terminée par le technicien A, avec sa facture. */
+/** Une intervention terminée par un technicien (A par défaut), avec sa facture. */
 async function interventionFacturee(options?: {
   typePanne?: string;
   pieces?: { designation: string; montant: number }[];
+  technicien?: { id: string };
 }) {
   const typePanne = options?.typePanne ?? "COUPURE_TOTALE";
+  const technicienId = options?.technicien?.id ?? jeu.techA.id;
 
   const intervention = await creerIntervention({
     clientId: jeu.clientA.id,
@@ -64,14 +67,14 @@ async function interventionFacturee(options?: {
     interventionId: intervention.id,
     vers: "ASSIGNEE",
     action: "ACCEPTATION",
-    technicienId: jeu.techA.id,
-    champs: { technicien: { connect: { id: jeu.techA.id } } },
+    technicienId,
+    champs: { technicien: { connect: { id: technicienId } } },
   });
   await changerStatut({
     interventionId: intervention.id,
     vers: "EN_COURS",
     action: "DEMARRAGE",
-    technicienId: jeu.techA.id,
+    technicienId,
     champs: { dateDebut: new Date() },
   });
 
@@ -80,7 +83,7 @@ async function interventionFacturee(options?: {
     interventionId: intervention.id,
     vers: "TERMINEE",
     action: "CLOTURE",
-    technicienId: jeu.techA.id,
+    technicienId,
     champs: { dateFin: new Date(), rapport: "Connecteur nettoyé, ligne rétablie." },
     apres: async (tx) => {
       const facture = await emettreFacture(tx, {
@@ -519,6 +522,91 @@ describe("Bilan et paie", () => {
     // societe ne l'a pas encore recu. Les confondre masquerait le jour ou un
     // technicien cesse de reverser.
     expect(bilan.chezTechniciens).toBeLessThanOrEqual(bilan.encaisse);
+  });
+
+  it("enregistre la paie versée et refuse de payer deux fois le même mois", async () => {
+    const maintenant = new Date();
+    const mois = `${maintenant.getFullYear()}-${String(maintenant.getMonth() + 1).padStart(2, "0")}`;
+
+    const avant = await paieDuMois(
+      new Date(maintenant.getFullYear(), maintenant.getMonth(), 1),
+      new Date(maintenant.getFullYear(), maintenant.getMonth() + 1, 0, 23, 59, 59),
+    );
+    const attendue = avant.find((l) => l.technicienId === jeu.techA.id);
+    expect(attendue?.bulletin).toBeNull();
+
+    const bulletin = await verserPaie({
+      technicienId: jeu.techA.id,
+      mois,
+      superviseurId: "superviseur-de-test",
+      commentaire: "Virement bancaire",
+    });
+
+    // Les montants sont recalculés côté serveur, jamais reçus du client.
+    expect(bulletin.montantTotal).toBe(attendue!.total);
+    expect(bulletin.commission).toBe(attendue!.commission);
+    expect(bulletin.interventions).toBe(attendue!.interventions);
+
+    // Un mois payé deux fois est exactement ce que la contrainte d'unicité
+    // sur (technicien, mois) existe pour empêcher.
+    await expect(
+      verserPaie({
+        technicienId: jeu.techA.id,
+        mois,
+        superviseurId: "superviseur-de-test",
+      }),
+    ).rejects.toBeInstanceOf(ErreurMetier);
+  });
+
+  it("fige les montants du bulletin : une facture corrigée après coup ne réécrit pas un salaire payé", async () => {
+    const maintenant = new Date();
+    const debut = new Date(maintenant.getFullYear(), maintenant.getMonth(), 1);
+    const fin = new Date(
+      maintenant.getFullYear(),
+      maintenant.getMonth() + 1,
+      0,
+      23,
+      59,
+      59,
+    );
+    const mois = `${maintenant.getFullYear()}-${String(maintenant.getMonth() + 1).padStart(2, "0")}`;
+
+    // Une intervention neuve pour le technicien B, puis sa paie versée.
+    const { factureId } = await interventionFacturee({ technicien: jeu.techB });
+    const bulletin = await verserPaie({
+      technicienId: jeu.techB.id,
+      mois,
+      superviseurId: "superviseur-de-test",
+    });
+
+    // Le superviseur corrige ensuite une facture de ce mois, à la hausse.
+    await corrigerFacture({
+      factureId,
+      superviseurId: "superviseur-de-test",
+      motif: "Pièce oubliée à la clôture, ajoutée après contrôle.",
+      lignes: [
+        { designation: "Déplacement", montant: TARIFS.COUPURE_TOTALE },
+        { designation: "Pièce oubliée", montant: 500_000 },
+      ],
+    });
+
+    // Les données sous-jacentes ont bien bougé…
+    const facture = await prisma.facture.findUniqueOrThrow({
+      where: { id: factureId },
+    });
+    expect(facture.montantTotal).toBe(TARIFS.COUPURE_TOTALE + 500_000);
+
+    // …et la paie ne bouge pas : on ne réécrit pas un salaire déjà payé.
+    const ligne = (await paieDuMois(debut, fin)).find(
+      (l) => l.technicienId === jeu.techB.id,
+    )!;
+    expect(ligne.total).toBe(bulletin.montantTotal);
+    expect(ligne.chiffreAffaires).toBe(bulletin.chiffreAffaires);
+    expect(ligne.commission).toBe(bulletin.commission);
+    expect(ligne.interventions).toBe(bulletin.interventions);
+
+    // Le gel porte sur la ligne entière : elle continue de s'additionner.
+    expect(ligne.salaireBase + ligne.commission).toBe(ligne.total);
   });
 
   it("commissionne le travail fait, payé ou non", async () => {

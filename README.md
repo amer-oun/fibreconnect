@@ -97,7 +97,7 @@ Projet de fin d'études (stage BTP).
 
 ## Schéma de la base
 
-Dix tables : six pour l'activité, quatre pour l'argent. SQLite ne supportant pas
+Onze tables : six pour l'activité, cinq pour l'argent. SQLite ne supportant pas
 les `enum` Prisma, les champs `role`, `statutCompte`, `statut`, `priorite`,
 `typePanne`, `zone`, `moyen` et les statuts de facture, de paiement et de
 versement sont des `String` dont les valeurs autorisées sont centralisées dans
@@ -126,6 +126,7 @@ erDiagram
     Technicien  ||--o{ Paiement : "encaisse en espèces"
     Technicien  ||--o{ Versement : "remet"
     Versement   ||--o{ Paiement : "regroupe"
+    Technicien  ||--o{ BulletinPaie : "est payé"
 
     Utilisateur {
         string   id PK
@@ -240,6 +241,21 @@ erDiagram
         datetime dateCreation
         datetime dateConfirmation "nullable"
         string   confirmePar "nullable"
+    }
+
+    BulletinPaie {
+        string   id PK
+        string   technicienId FK
+        string   mois "2026-08 - unique avec technicienId"
+        int      salaireBase "millimes - fige"
+        float    tauxCommission "fige"
+        int      interventions "fige"
+        int      chiffreAffaires "millimes - fige"
+        int      commission "millimes - fige"
+        int      montantTotal "millimes - fige"
+        datetime dateVersement
+        string   versePar "id superviseur"
+        string   commentaire "nullable"
     }
 ```
 
@@ -475,6 +491,29 @@ Mélanger « ce que nous vous devons » et « ce que vous détenez pour nous » 
 un seul nombre produit un chiffre sur lequel aucune des deux parties ne peut
 agir — on ne rend pas la moitié d'un salaire.
 
+**Le versement est enregistré, pas seulement calculé.** Quand le superviseur a
+payé, il l'atteste depuis le tableau de paie : un `BulletinPaie` est créé. C'est
+le pendant du `Versement`, dans l'autre sens — celui-ci enregistre l'argent qui
+remonte du technicien vers la société, le bulletin celui qui descend. Sans lui,
+la paie n'était qu'un calcul refait à chaque ouverture de page, et rien
+n'empêchait de payer deux fois le même mois. La contrainte
+`@@unique([technicienId, mois])` est cette garantie, posée en base et non dans
+une vérification applicative — même rôle que `Paiement.reference`.
+
+**Un bulletin fige ses montants**, exactement comme une facture fige les siens à
+l'émission. Si une facture du mois est corrigée ensuite, la paie déjà versée ne
+bouge pas : on ne réécrit pas un salaire qui a été payé. Le gel porte sur la
+**ligne entière** et non sur le seul total — mélanger une commission recalculée
+avec un total figé donnerait une ligne où le fixe plus la commission ne font pas
+le total, et un tableau qui ne s'additionne pas est pire qu'un tableau périmé.
+
+L'enregistrement est **définitif**, comme l'accusé de réception d'une remise
+d'espèces : il atteste que de l'argent a changé de main hors de l'application.
+Ce qui rend ce geste sûr, c'est qu'il n'est jamais un simple clic dans un
+tableau — le bouton ouvre un panneau qui nomme le technicien, le mois et le
+montant, et redemande confirmation. Cinq lignes d'un tableau se ressemblent, et
+le bouton qui paie Karim est à deux centimètres de celui qui paie Sonia.
+
 ---
 
 ## Installation
@@ -545,8 +584,8 @@ Mot de passe commun à tous les comptes : **`Passer123`**
 | Client | `hatem.zouari@example.tn` | Ooredoo | Sfax (Sfax) |
 
 Le jeu de données contient 2 opérateurs, 12 utilisateurs, 33 interventions
-réparties sur 6 mois, 106 lignes d'historique, 21 factures, 18 règlements et
-4 remises d'espèces.
+réparties sur 6 mois, 106 lignes d'historique, 21 factures, 18 règlements,
+4 remises d'espèces et 5 bulletins de paie.
 
 Deux détails du jeu de données sont volontaires et servent la démonstration :
 
@@ -566,6 +605,11 @@ Deux détails du jeu de données sont volontaires et servent la démonstration :
 - **Quatre techniciens détiennent encore des espèces, un cinquième a déjà
   déclaré sa remise.** Les deux moitiés du circuit de l'argent liquide sont
   donc visibles en même temps.
+- **La paie du mois précédent est versée, celle du mois en cours ne l'est pas.**
+  Un tableau où toutes les lignes disent « Versée le… » ne montrerait jamais le
+  bouton ; un tableau où aucune ne le dit ne montrerait jamais à quoi ressemble
+  un mois payé. Le lien « Mois précédent » de la page Finances a ainsi quelque
+  chose à montrer.
 
 La page `/login` affiche ces comptes dans un panneau dépliant. Passez
 `NEXT_PUBLIC_MODE_DEMO="false"` dans `.env` pour le masquer en production.
@@ -622,6 +666,11 @@ Le circuit de l'argent se démontre en trois connexions, sans rien préparer.
 10. En bas de page, le tableau de paie montre pour chaque technicien son fixe,
     sa commission sur ce qu'il a facturé ce mois-ci, et — dans une colonne
     séparée, jamais déduite — les espèces qu'il détient encore.
+11. « Enregistrer le versement » sur une ligne : un panneau nomme le technicien,
+    le mois et le montant, et redemande confirmation. La ligne passe à
+    « Versée le… », et le bouton disparaît — ce mois-là ne peut plus être payé
+    une seconde fois. Suivez « Mois précédent » pour voir un mois entièrement
+    versé, puis exportez la paie en CSV.
 
 Essayez aussi de confirmer un virement **depuis le compte de l'abonné** : la
 route le refuse. C'est la société qui constate l'arrivée de l'argent, pas
@@ -695,10 +744,13 @@ celui qui prétend l'avoir envoyé.
     accepte, le chronomètre s'arrête et ne repart pas.
 17. Le tableau de bord du technicien classe par **temps restant**, pas par
     étiquette de priorité, pour que la liste et les badges disent la même chose.
+18. La paie versée est **enregistrée**, pas seulement calculée. Un mois ne peut
+    pas être payé deux fois (contrainte d'unicité en base), et les montants d'un
+    bulletin sont figés à l'enregistrement.
 
 ### Ces règles sont testées
 
-`npm test` exécute 89 tests.
+`npm test` exécute 91 tests.
 
 Les 25 premiers portent sur les règles métier et tournent contre une base
 SQLite jetable, construite à partir des vraies migrations : cycle complet des
@@ -725,7 +777,7 @@ dépend jamais de la vitesse de la machine.
 comptée deux fois en parcourant toutes les pages, qu'une URL bricolée à la main
 retombe sur une page valide, et que les liens de page conservent les filtres.
 
-Les 27 derniers portent sur l'argent, et vérifient qu'on ne peut ni en créer ni
+29 portent sur l'argent, et vérifient qu'on ne peut ni en créer ni
 en perdre par les chemins que l'application propose :
 
 - une confirmation de paiement **rejouée trois fois** ne compte l'encaissement
@@ -739,7 +791,10 @@ en perdre par les chemins que l'application propose :
 - une remise déclarée deux fois est refusée, un accusé de réception donné deux
   fois aussi ;
 - une facture ne se corrige ni ne s'annule dès qu'un règlement est confirmé, et
-  une facture annulée sort du chiffre d'affaires.
+  une facture annulée sort du chiffre d'affaires ;
+- un mois de paie ne se verse pas deux fois, et une facture corrigée après le
+  versement ne réécrit **aucun** des chiffres du bulletin — la ligne figée
+  continue de s'additionner.
 
 Les 12 restants portent sur les délais et sur les deux formats que les exports
 utilisent. Tous sont des **fonctions pures** auxquelles l'instant courant est
@@ -1036,6 +1091,9 @@ sens contraire. Il demande une table de plus et, surtout, de renoncer à la
 relation un-à-un entre intervention et facture, puisqu'il faudrait pouvoir en
 réémettre une. C'est un choix de modélisation, pas un oubli.
 
-**La paie est un calcul, pas un versement.** Le tableau montre ce que la société
-doit à chaque technicien pour le mois ; rien n'enregistre qu'elle l'a payé. Il
-manque à la rémunération le pendant du `Versement` qui existe pour les espèces.
+**Un bulletin de paie ne s'annule pas.** L'enregistrement du versement est
+définitif, comme l'accusé de réception d'une remise d'espèces. Une erreur de
+saisie se corrige aujourd'hui en base. L'ajouter proprement demanderait le même
+mécanisme que la rectification de facture — motif, trace, auteur — et la
+question de savoir ce que devient la contrainte d'unicité une fois le bulletin
+annulé.

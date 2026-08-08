@@ -181,6 +181,21 @@ export const annulationFactureSchema = z.object({
   motif: motifRectification,
 });
 
+/**
+ * Enregistrement de la paie versee a un technicien pour un mois.
+ *
+ * Aucun montant dans le payload : il est recalcule cote serveur, comme celui
+ * d'une remise d'especes. Le tableau de paie est a l'ecran au moment du clic,
+ * donc un montant envoye serait un montant que le navigateur peut modifier.
+ */
+export const versementPaieSchema = z.object({
+  technicienId: texteObligatoire("Le technicien"),
+  mois: z
+    .string()
+    .regex(/^\d{4}-\d{2}$/, "Mois attendu au format AAAA-MM."),
+  commentaire: z.string().trim().max(300).optional(),
+});
+
 /** Notation d'une intervention terminee par le client. */
 export const notationSchema = z.object({
   note: z

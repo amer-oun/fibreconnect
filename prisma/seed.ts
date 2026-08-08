@@ -43,6 +43,7 @@ type Etape = {
 async function main() {
   console.log("Nettoyage de la base...");
   // Ordre imposé par les clés étrangères : les enfants d'abord.
+  await prisma.bulletinPaie.deleteMany();
   await prisma.paiement.deleteMany();
   await prisma.versement.deleteMany();
   await prisma.ligneFacture.deleteMany();
@@ -1019,6 +1020,81 @@ async function main() {
   }
 
   /* ---------------------------------------------------------------------- */
+  /* Paie du mois précédent, déjà versée                                    */
+  /* ---------------------------------------------------------------------- */
+
+  /**
+   * The previous month is paid, the current one is not.
+   *
+   * Both states have to be on screen at once: a payroll table where every row
+   * says "Versée le…" would never show the button, and one where no row does
+   * would never show what a paid month looks like. The month navigation on the
+   * finances page then has somewhere to go.
+   */
+  console.log("Enregistrement de la paie du mois précédent...");
+
+  const moisPrecedent = new Date(
+    new Date().getFullYear(),
+    new Date().getMonth() - 1,
+    1,
+  );
+  const finMoisPrecedent = new Date(
+    moisPrecedent.getFullYear(),
+    moisPrecedent.getMonth() + 1,
+    0,
+    23,
+    59,
+    59,
+    999,
+  );
+  const clePrecedent = `${moisPrecedent.getFullYear()}-${String(
+    moisPrecedent.getMonth() + 1,
+  ).padStart(2, "0")}`;
+
+  for (const technicien of [karim, sonia, mehdi, amine, yosr]) {
+    const facturesDuMois = await prisma.facture.findMany({
+      where: {
+        statut: { not: "ANNULEE" },
+        intervention: {
+          technicienId: technicien.id,
+          statut: "TERMINEE",
+          dateFin: { gte: moisPrecedent, lte: finMoisPrecedent },
+        },
+      },
+      select: { montantTotal: true },
+    });
+
+    const chiffreAffaires = facturesDuMois.reduce(
+      (s, f) => s + f.montantTotal,
+      0,
+    );
+    const commission = Math.round(chiffreAffaires * technicien.tauxCommission);
+
+    await prisma.bulletinPaie.create({
+      data: {
+        technicienId: technicien.id,
+        mois: clePrecedent,
+        salaireBase: technicien.salaireBase,
+        tauxCommission: technicien.tauxCommission,
+        interventions: facturesDuMois.length,
+        chiffreAffaires,
+        commission,
+        montantTotal: technicien.salaireBase + commission,
+        // Versée le 5 du mois suivant, comme une paie ordinaire.
+        dateVersement: new Date(
+          moisPrecedent.getFullYear(),
+          moisPrecedent.getMonth() + 1,
+          5,
+          10,
+          0,
+        ),
+        versePar: superviseur.id,
+        commentaire: "Virement bancaire",
+      },
+    });
+  }
+
+  /* ---------------------------------------------------------------------- */
   /* Récapitulatif                                                          */
   /* ---------------------------------------------------------------------- */
 
@@ -1048,6 +1124,7 @@ async function main() {
   console.log(`  Factures      : ${await prisma.facture.count()}`);
   console.log(`  Paiements     : ${await prisma.paiement.count()}`);
   console.log(`  Versements    : ${await prisma.versement.count()}`);
+  console.log(`  Bulletins     : ${await prisma.bulletinPaie.count()}`);
   console.log("\n  Identifiants de connexion");
   console.log(`  Mot de passe commun a tous les comptes : ${MOT_DE_PASSE_DEMO}\n`);
   console.table(comptes);

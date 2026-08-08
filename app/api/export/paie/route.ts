@@ -1,7 +1,7 @@
 import { exigerRoleApi, traiterErreur } from "@/lib/api";
 import { paieDuMois } from "@/lib/facturation";
 import { montantPourTableur } from "@/lib/monnaie";
-import { bornesDuMois } from "@/lib/dates";
+import { bornesDuMois, formaterDateHeure } from "@/lib/dates";
 import { construireCsv } from "@/lib/csv";
 
 /**
@@ -24,6 +24,8 @@ const ENTETES = [
   "Commission",
   "À verser",
   "Espèces détenues",
+  "Versée le",
+  "Commentaire",
 ];
 
 export async function GET(requete: Request) {
@@ -47,6 +49,8 @@ export async function GET(requete: Request) {
       montantPourTableur(l.commission),
       montantPourTableur(l.total),
       montantPourTableur(l.especesEnMain),
+      l.bulletin ? formaterDateHeure(l.bulletin.dateVersement) : "",
+      l.bulletin?.commentaire ?? "",
     ]);
 
     return new Response(construireCsv(ENTETES, lignes), {

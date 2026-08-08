@@ -23,6 +23,7 @@ import { BadgeFacture } from "@/components/ui/badges";
 import { LienBouton } from "@/components/ui/bouton";
 import BoutonImpression from "@/components/ui/bouton-impression";
 import BoutonConfirmation from "@/components/facturation/bouton-confirmation";
+import VersementPaie from "@/components/facturation/versement-paie";
 
 export const metadata: Metadata = { title: "Finances" };
 
@@ -119,7 +120,10 @@ export default async function PageFinances({
   ]);
 
   const soldes = await restesAPayer(prisma, impayees);
+  // `paieDuMois` a déjà substitué les montants du bulletin là où la paie a été
+  // versée : rien à arbitrer ici.
   const masseSalariale = paie.reduce((s, l) => s + l.total, 0);
+  const resteAVerser = paie.filter((l) => !l.bulletin).length;
 
   const moisPrecedent = moisDecale(debutDuMois, -1);
   const moisSuivant = moisDecale(debutDuMois, 1);
@@ -384,7 +388,7 @@ export default async function PageFinances({
           </TitrePanneau>
 
           <div className="overflow-x-auto">
-            <table className="w-full min-w-[46rem] text-sm">
+            <table className="w-full min-w-[58rem] text-sm">
               <caption className="sr-only">
                 Rémunération des techniciens pour le mois en cours
               </caption>
@@ -410,6 +414,9 @@ export default async function PageFinances({
                   </th>
                   <th scope="col" className="px-4 py-2.5 text-right eyebrow">
                     Espèces détenues
+                  </th>
+                  <th scope="col" className="px-4 py-2.5 text-right eyebrow">
+                    Versement
                   </th>
                 </tr>
               </thead>
@@ -445,6 +452,29 @@ export default async function PageFinances({
                         ? formaterMontant(ligne.especesEnMain)
                         : "—"}
                     </td>
+                    <td className="px-4 py-3 text-right">
+                      {ligne.bulletin ? (
+                        <span className="text-xs text-valide">
+                          Versée le{" "}
+                          {formaterDateHeure(ligne.bulletin.dateVersement)}
+                          {ligne.bulletin.commentaire && (
+                            <span className="mt-0.5 block text-brume">
+                              {ligne.bulletin.commentaire}
+                            </span>
+                          )}
+                        </span>
+                      ) : (
+                        <span className="sans-impression inline-flex justify-end">
+                          <VersementPaie
+                            technicienId={ligne.technicienId}
+                            nom={ligne.nom}
+                            mois={moisChoisi}
+                            libelleMois={libelleDuMois(debutDuMois)}
+                            montant={ligne.total}
+                          />
+                        </span>
+                      )}
+                    </td>
                   </tr>
                 ))}
               </tbody>
@@ -456,7 +486,14 @@ export default async function PageFinances({
             dans le mois, réglées ou non : le travail a été fait, le
             recouvrement est l’affaire de la société. La colonne « espèces
             détenues » est une dette du technicien envers l’entreprise, jamais
-            déduite de sa paie.
+            déduite de sa paie.{" "}
+            {resteAVerser > 0
+              ? `${resteAVerser} paie${resteAVerser > 1 ? "s" : ""} de ce mois ${
+                  resteAVerser > 1 ? "restent" : "reste"
+                } à verser.`
+              : "Toutes les paies de ce mois ont été versées."}{" "}
+            L’enregistrement d’un versement fige ses montants : une facture du
+            mois corrigée plus tard ne réécrit pas un salaire déjà payé.
           </p>
         </Panneau>
       </div>
