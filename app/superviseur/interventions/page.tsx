@@ -5,9 +5,11 @@ import { exigerRole } from "@/lib/session";
 import { selectionListe } from "@/lib/interventions";
 import {
   OPTIONS_PRIORITE,
+  OPTIONS_RETARD,
   OPTIONS_STATUT,
   OPTIONS_TYPE_PANNE,
   OPTIONS_ZONE_FILTRE,
+  conditionHorsDelai,
   construireFiltreIntervention,
   type ParametresRecherche,
 } from "@/lib/filtres";
@@ -86,6 +88,12 @@ export default async function InterventionsSuperviseur({
       prisma.intervention.count({ where: { statut: "NOUVELLE" } }),
     ]);
 
+  // Compté par la base, avec la même clause que le filtre « hors délai » :
+  // le chiffre affiché et la liste derrière le lien ne peuvent pas diverger.
+  const horsDelai = await prisma.intervention.count({
+    where: conditionHorsDelai(),
+  });
+
   const filtre = Object.keys(parametres).some((cle) => cle !== "page");
 
   const techniciens: TechnicienAffectable[] = techniciensBruts.map((t) => ({
@@ -127,8 +135,10 @@ export default async function InterventionsSuperviseur({
         <Indicateur
           libelle="Sans technicien"
           valeur={sansTechnicien}
-          accent={ACCENTS.neutre}
-          precision="à affecter"
+          accent={horsDelai > 0 ? ACCENTS.danger : ACCENTS.neutre}
+          precision={
+            horsDelai > 0 ? `dont ${horsDelai} hors délai` : "toutes dans les délais"
+          }
         />
         <Indicateur
           libelle={filtre ? "Résultats" : "Total"}
@@ -160,6 +170,7 @@ export default async function InterventionsSuperviseur({
             },
             { cle: "type", label: "Type", options: OPTIONS_TYPE_PANNE },
             { cle: "priorite", label: "Priorité", options: OPTIONS_PRIORITE },
+            { cle: "retard", label: "Délai", options: OPTIONS_RETARD },
           ]}
         />
 
@@ -180,6 +191,7 @@ export default async function InterventionsSuperviseur({
                 intervention={intervention}
                 afficherClient
                 afficherTechnicien
+                afficherEcheance
                 actions={
                   <div className="flex flex-col items-start gap-2 md:items-end">
                     <AffectationSuperviseur

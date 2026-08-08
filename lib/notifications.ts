@@ -1,5 +1,11 @@
 import { prisma } from "@/lib/prisma";
-import { libelleTypePanne, type Role } from "@/lib/constants";
+import {
+  delaiDe,
+  libellePriorite,
+  libelleTypePanne,
+  type Role,
+} from "@/lib/constants";
+import { conditionHorsDelai } from "@/lib/filtres";
 import { formaterMontant } from "@/lib/monnaie";
 import { restesAPayer } from "@/lib/facturation";
 
@@ -235,16 +241,17 @@ async function notificationsSuperviseur() {
     remises,
     virements,
   ] = await Promise.all([
+      // Hors du delai promis pour leur priorite, pas « depuis plus de 24 h » :
+      // une coupure totale urgente et un changement de routeur peuvent avoir le
+      // meme age sans que l'un et l'autre appellent le meme geste.
       prisma.intervention.findMany({
-        where: {
-          statut: "NOUVELLE",
-          dateCreation: { lte: new Date(Date.now() - JOUR) },
-        },
+        where: conditionHorsDelai(),
         orderBy: { dateCreation: "asc" },
         take: 8,
         select: {
           id: true,
           typePanne: true,
+          priorite: true,
           dateCreation: true,
           client: { select: { ville: true, zone: true } },
         },
@@ -359,9 +366,11 @@ async function notificationsSuperviseur() {
     })),
     ...enAttente.map((i) => ({
       id: `attente-${i.id}`,
-      titre: "Panne sans technicien depuis plus de 24 h",
+      titre: `Hors délai — ${libellePriorite(i.priorite).toLowerCase()}, ${delaiDe(
+        i.priorite,
+      )} h promises`,
       detail: `${libelleTypePanne(i.typePanne)} · zone ${i.client.zone} · ${i.client.ville}`,
-      lien: "/superviseur/interventions",
+      lien: "/superviseur/interventions?retard=1",
       date: i.dateCreation,
       ton: "alerte" as const,
     })),

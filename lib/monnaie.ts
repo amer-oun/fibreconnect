@@ -58,6 +58,22 @@ export function formaterMontantCourt(millimes: number): string {
 }
 
 /**
+ * Un montant destiné à une cellule de tableur : `105500` → `105,500`.
+ *
+ * Ni unité ni séparateur de milliers, pour qu'Excel y voie un **nombre** et non
+ * du texte — un registre comptable dont la colonne « Montant » ne s'additionne
+ * pas ne sert à rien.
+ *
+ * La virgule décimale suppose un Excel en locale française, ce qui est déjà
+ * l'hypothèse de `lib/csv.ts` (point-virgule comme séparateur de colonnes). Un
+ * Excel anglais lirait `105,500` comme cent-cinq mille cinq cents : les deux
+ * conventions vont de pair, on ne peut pas en changer une seule.
+ */
+export function montantPourTableur(millimes: number): string {
+  return (millimes / MILLIMES_PAR_DINAR).toFixed(3).replace(".", ",");
+}
+
+/**
  * Part d'un montant, arrondie au millime.
  *
  * Le taux est un nombre décimal (0,15 = 15 %), mais le résultat retombe

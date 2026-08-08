@@ -3,7 +3,7 @@ import type { Metadata } from "next";
 import { prisma } from "@/lib/prisma";
 import { exigerRole } from "@/lib/session";
 import { selectionListe } from "@/lib/interventions";
-import { ACCENTS } from "@/lib/constants";
+import { ACCENTS, estHorsDelai, heuresAvantEcheance } from "@/lib/constants";
 import {
   OPTIONS_PRIORITE,
   OPTIONS_TYPE_PANNE,
@@ -67,8 +67,8 @@ export default async function PannesDisponibles({
           construireFiltreIntervention(parametres),
         ],
       },
-      // Les plus anciennes d'abord ; la priorite est remise dans l'ordre
-      // metier juste apres, en memoire (voir `rang`).
+      // Les plus anciennes d'abord ; l'ordre reel est recalcule juste apres,
+      // en memoire, a partir du temps restant (voir `triees`).
       orderBy: { dateCreation: "asc" },
       select: selectionListe,
     }),
@@ -83,14 +83,26 @@ export default async function PannesDisponibles({
     }),
   ]);
 
-  // `priorite` est une chaîne : on remet l'ordre métier côté serveur.
-  const rang = { URGENTE: 0, HAUTE: 1, NORMALE: 2, BASSE: 3 } as Record<string, number>;
+  /*
+   * Trié par temps restant avant l'échéance, pas par étiquette de priorité.
+   *
+   * La priorité est déjà dans le délai qu'elle accorde (voir
+   * DELAIS_PRISE_EN_CHARGE), donc à âge égal une urgente passe devant une
+   * haute, comme avant. Ce que ce tri ajoute, c'est le vieillissement : une
+   * normale déclarée il y a trois jours passe devant une basse du matin.
+   *
+   * Surtout, la liste dit alors la même chose que le badge posé sur chaque
+   * ligne. Un tri par priorité qui reléguerait en bas une panne affichant
+   * « En retard » donnerait deux consignes contradictoires sur le même écran.
+   */
+  const instantDuTri = new Date();
   const triees = [...disponibles].sort(
     (a, b) =>
-      (rang[a.priorite] ?? 9) - (rang[b.priorite] ?? 9) ||
-      a.dateCreation.getTime() - b.dateCreation.getTime(),
+      heuresAvantEcheance(a.dateCreation, a.priorite, instantDuTri) -
+      heuresAvantEcheance(b.dateCreation, b.priorite, instantDuTri),
   );
 
+  const enRetard = triees.filter((i) => estHorsDelai(i, instantDuTri)).length;
   const filtre = Object.keys(parametres).length > 0;
 
   return (
@@ -105,8 +117,12 @@ export default async function PannesDisponibles({
         <Indicateur
           libelle="À prendre"
           valeur={totalZone}
-          accent={ACCENTS.signal}
-          precision={`zone ${technicien.zone}`}
+          accent={enRetard > 0 ? ACCENTS.danger : ACCENTS.signal}
+          precision={
+            enRetard > 0
+              ? `dont ${enRetard} hors délai`
+              : `zone ${technicien.zone}`
+          }
         />
         <Indicateur
           libelle="Mes interventions"
@@ -151,6 +167,7 @@ export default async function PannesDisponibles({
                 key={intervention.id}
                 intervention={intervention}
                 afficherClient
+                afficherEcheance
                 actions={
                   <ActionsTechnicien
                     interventionId={intervention.id}

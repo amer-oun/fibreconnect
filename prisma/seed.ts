@@ -421,13 +421,19 @@ async function main() {
   // Zone de Sousse : aucun technicien ne la couvre, donc personne ne voit
   // cette panne. C'est exactement ce que le tableau de bord du superviseur
   // doit signaler — une zone decouverte n'est pas une zone vide.
+  //
+  // Trente heures pour une priorite HAUTE, dont le delai de prise en charge
+  // est de vingt-quatre : elle est donc aussi la seule panne hors delai du jeu
+  // de donnees. Les deux faits vont ensemble et c'est tout l'interet — une
+  // zone sans technicien ne produit pas une gene abstraite, elle fait rater un
+  // engagement, et c'est ce lien que la demonstration doit rendre visible.
   await creerIntervention({
     clientId: rania.id,
     typePanne: "CABLE_ENDOMMAGE",
     priorite: "HAUTE",
     description:
       "Le câble de branchement pend le long de la façade depuis la tempête de cette nuit.",
-    creeeIlYaHeures: 14,
+    creeeIlYaHeures: 30,
     etapes: [],
   });
 

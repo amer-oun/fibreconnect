@@ -1,5 +1,11 @@
 import { prisma } from "@/lib/prisma";
-import { STATUTS, TYPE_PANNE_LABELS, ZONES, type Statut } from "@/lib/constants";
+import {
+  STATUTS,
+  TYPE_PANNE_LABELS,
+  ZONES,
+  estHorsDelai,
+  type Statut,
+} from "@/lib/constants";
 import { heuresEntre } from "@/lib/dates";
 
 /**
@@ -42,6 +48,7 @@ export async function statistiquesSuperviseur(fenetre: Fenetre = 6) {
         dateDebut: true,
         dateFin: true,
         statut: true,
+        priorite: true,
         noteClient: true,
         technicienId: true,
         client: { select: { operateurId: true, zone: true } },
@@ -186,8 +193,20 @@ export async function statistiquesSuperviseur(fenetre: Fenetre = 6) {
     (z) => !z.couverte && z.interventions > 0,
   );
 
+  // Pannes qui attendent encore un technicien au-delà du délai promis pour
+  // leur priorité. Calculé sur les lignes déjà chargées, avec la même règle
+  // que le filtre « hors délai » de la liste (voir lib/filtres.ts).
+  const instantDuCalcul = new Date();
+  const horsDelai = interventions.filter((i) =>
+    estHorsDelai(
+      { statut: i.statut, priorite: i.priorite, dateCreation: i.dateCreation },
+      instantDuCalcul,
+    ),
+  ).length;
+
   return {
     total,
+    horsDelai,
     nombreClients,
     nombreTechniciens: techniciens.length,
     techniciensActifs: techniciens.filter(

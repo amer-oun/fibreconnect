@@ -89,3 +89,49 @@ export function formaterDuree(
 export function heuresEntre(debut: Date, fin: Date) {
   return (fin.getTime() - debut.getTime()) / 3600000;
 }
+
+/**
+ * Bornes d'un mois calendaire, à partir d'un `2026-08` venu d'une URL.
+ *
+ * Une valeur absente ou incohérente retombe sur le mois en cours plutôt que de
+ * lever : un paramètre d'URL bricolé à la main ne doit pas casser une page.
+ * Les bornes sont inclusives des deux côtés, la fin au dernier milliseconde du
+ * mois — un paiement enregistré à 23 h 59 le 31 appartient au mois de la paie
+ * qu'il alimente.
+ */
+export function bornesDuMois(valeur?: string | null) {
+  const correspondance = /^(\d{4})-(\d{2})$/.exec(valeur ?? "");
+  const maintenant = new Date();
+
+  const annee = correspondance ? Number(correspondance[1]) : maintenant.getFullYear();
+  const mois = correspondance ? Number(correspondance[2]) - 1 : maintenant.getMonth();
+
+  if (mois < 0 || mois > 11) return bornesDuMois(null);
+
+  return {
+    debut: new Date(annee, mois, 1),
+    fin: new Date(annee, mois + 1, 0, 23, 59, 59, 999),
+    /** `2026-08`, tel qu'il repart dans une URL. */
+    cle: `${annee}-${String(mois + 1).padStart(2, "0")}`,
+  };
+}
+
+/** `2026-08` → « août 2026 ». */
+export function libelleDuMois(debut: Date) {
+  return new Intl.DateTimeFormat("fr-FR", {
+    month: "long",
+    year: "numeric",
+  }).format(debut);
+}
+
+/**
+ * Clé du mois décalé de `n` mois, pour les liens « précédent » et « suivant ».
+ *
+ * Renvoie `null` pour un mois qui n'a pas commencé : une paie du futur est vide,
+ * et une page vide sans explication se lit comme une panne.
+ */
+export function moisDecale(debut: Date, decalage: number): string | null {
+  const cible = new Date(debut.getFullYear(), debut.getMonth() + decalage, 1);
+  if (cible > new Date()) return null;
+  return `${cible.getFullYear()}-${String(cible.getMonth() + 1).padStart(2, "0")}`;
+}

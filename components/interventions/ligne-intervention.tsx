@@ -5,6 +5,7 @@ import { libelleTypePanne } from "@/lib/constants";
 import { formaterDateHeure, formaterDelai } from "@/lib/dates";
 import type { InterventionListe } from "@/lib/interventions";
 import { BadgePriorite, BadgeStatut, Reference } from "@/components/ui/badges";
+import Echeance from "@/components/interventions/echeance";
 
 /**
  * One intervention in a list.
@@ -18,12 +19,26 @@ export default function LigneIntervention({
   lien,
   afficherClient = false,
   afficherTechnicien = false,
+  afficherEcheance = false,
   actions,
 }: {
   intervention: InterventionListe;
   lien?: string;
   afficherClient?: boolean;
   afficherTechnicien?: boolean;
+  /**
+   * Compte à rebours de prise en charge.
+   *
+   * Réservé au technicien et au superviseur, et **volontairement absent de
+   * l'écran de l'abonné**. Le délai est un objectif interne d'aiguillage ; le
+   * montrer au client en fait un engagement, que la société n'a pas pris. Et
+   * « En retard de 6 h » sur l'écran de quelqu'un qui ne peut rien y faire est
+   * un reproche sans remède.
+   *
+   * Le jour où la société veut en faire une promesse publique, ce booléen
+   * passe à `true` sur `/client/dashboard` et rien d'autre ne bouge.
+   */
+  afficherEcheance?: boolean;
   actions?: ReactNode;
 }) {
   const contenu = (
@@ -31,6 +46,15 @@ export default function LigneIntervention({
       <div className="flex flex-wrap items-center gap-2">
         <BadgeStatut statut={intervention.statut} />
         <BadgePriorite priorite={intervention.priorite} />
+        {/* Juste après la priorité : le délai est ce que la priorité veut
+            dire concrètement, les lire ensemble évite de les interpréter. */}
+        {afficherEcheance && (
+          <Echeance
+            dateCreation={intervention.dateCreation}
+            priorite={intervention.priorite}
+            statut={intervention.statut}
+          />
+        )}
         <Reference id={intervention.id} />
       </div>
 

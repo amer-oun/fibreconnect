@@ -5,7 +5,12 @@ import { prisma } from "@/lib/prisma";
 import { exigerRole } from "@/lib/session";
 import { ACCENTS, libelleTypePanne } from "@/lib/constants";
 import { formaterMontant } from "@/lib/monnaie";
-import { formaterDateHeure } from "@/lib/dates";
+import {
+  bornesDuMois,
+  formaterDateHeure,
+  libelleDuMois,
+  moisDecale,
+} from "@/lib/dates";
 import { bilanFinancier, paieDuMois, restesAPayer } from "@/lib/facturation";
 import {
   EntetePage,
@@ -15,6 +20,7 @@ import {
   TitrePanneau,
 } from "@/components/ui/surfaces";
 import { BadgeFacture } from "@/components/ui/badges";
+import { LienBouton } from "@/components/ui/bouton";
 import BoutonImpression from "@/components/ui/bouton-impression";
 import BoutonConfirmation from "@/components/facturation/bouton-confirmation";
 
@@ -28,19 +34,18 @@ export const metadata: Metadata = { title: "Finances" };
  * one figure that matters — billed but never collected — hide behind a tab
  * nobody opens.
  */
-export default async function PageFinances() {
+export default async function PageFinances({
+  searchParams,
+}: {
+  searchParams: Promise<{ mois?: string }>;
+}) {
   await exigerRole("SUPERVISEUR");
 
-  const maintenant = new Date();
-  const debutDuMois = new Date(maintenant.getFullYear(), maintenant.getMonth(), 1);
-  const finDuMois = new Date(
-    maintenant.getFullYear(),
-    maintenant.getMonth() + 1,
-    0,
-    23,
-    59,
-    59,
-  );
+  const {
+    debut: debutDuMois,
+    fin: finDuMois,
+    cle: moisChoisi,
+  } = bornesDuMois((await searchParams).mois);
 
   const [bilan, remises, virements, impayees, paie] = await Promise.all([
     bilanFinancier(),
@@ -116,13 +121,34 @@ export default async function PageFinances() {
   const soldes = await restesAPayer(prisma, impayees);
   const masseSalariale = paie.reduce((s, l) => s + l.total, 0);
 
+  const moisPrecedent = moisDecale(debutDuMois, -1);
+  const moisSuivant = moisDecale(debutDuMois, 1);
+
   return (
     <div className="mx-auto w-full max-w-6xl px-4 py-8 sm:px-6">
       <EntetePage
         surtitre="Comptabilité"
         titre="Finances"
-        description="Ce que la société a facturé, ce qu’elle a reçu, ce que ses techniciens détiennent encore, et ce qu’elle leur doit ce mois-ci."
-        actions={<BoutonImpression libelle="Imprimer l’état" />}
+        description="Ce que la société a facturé, ce qu’elle a reçu, ce que ses techniciens détiennent encore, et ce qu’elle leur doit."
+        actions={
+          <>
+            <LienBouton
+              href={`/api/export/factures`}
+              variante="secondaire"
+              prefetch={false}
+            >
+              Exporter les factures
+            </LienBouton>
+            <LienBouton
+              href={`/api/export/paie?mois=${moisChoisi}`}
+              variante="secondaire"
+              prefetch={false}
+            >
+              Exporter la paie
+            </LienBouton>
+            <BoutonImpression libelle="Imprimer l’état" />
+          </>
+        }
       />
 
       <div className="mb-8 grid gap-x-6 gap-y-5 sm:grid-cols-2 lg:grid-cols-4">
@@ -326,12 +352,35 @@ export default async function PageFinances() {
         <Panneau className="zone-impression">
           <TitrePanneau
             actions={
-              <span className="tabulaire text-sm font-semibold text-nuit">
-                {formaterMontant(masseSalariale)}
+              <span className="flex items-center gap-4">
+                {/* Naviguer d'un mois à l'autre par des liens plutôt qu'un
+                    sélecteur : l'URL porte le mois, donc un état de paie se
+                    partage et s'imprime tel quel. */}
+                <span className="sans-impression flex items-center gap-2 text-xs">
+                  {moisPrecedent && (
+                    <Link
+                      href={`/superviseur/finances?mois=${moisPrecedent}`}
+                      className="text-ardoise underline decoration-signal decoration-2 underline-offset-4"
+                    >
+                      Mois précédent
+                    </Link>
+                  )}
+                  {moisSuivant && (
+                    <Link
+                      href={`/superviseur/finances?mois=${moisSuivant}`}
+                      className="text-ardoise underline decoration-signal decoration-2 underline-offset-4"
+                    >
+                      Mois suivant
+                    </Link>
+                  )}
+                </span>
+                <span className="tabulaire text-sm font-semibold text-nuit">
+                  {formaterMontant(masseSalariale)}
+                </span>
               </span>
             }
           >
-            Paie du mois — fixe + commission
+            Paie de {libelleDuMois(debutDuMois)} — fixe + commission
           </TitrePanneau>
 
           <div className="overflow-x-auto">

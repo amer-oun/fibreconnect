@@ -52,7 +52,9 @@ export default async function TableauDeBordSuperviseur({
       />
 
       {/* Ce qui demande une décision passe avant les chiffres. */}
-      {(stats.zonesDecouvertes.length > 0 || stats.techniciensAValider > 0) && (
+      {(stats.zonesDecouvertes.length > 0 ||
+        stats.techniciensAValider > 0 ||
+        stats.horsDelai > 0) && (
         <div
           role="status"
           className="mb-8 flex flex-col gap-2 rounded-bloc border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-900"
@@ -66,6 +68,22 @@ export default async function TableauDeBordSuperviseur({
               </span>{" "}
               — {stats.zonesDecouvertes.map((z) => z.zone).join(", ")}. Les pannes
               qui y sont déclarées ne sont proposées à personne.
+            </p>
+          )}
+          {stats.horsDelai > 0 && (
+            <p>
+              <span className="font-medium">
+                {stats.horsDelai === 1
+                  ? "Une panne a dépassé son délai de prise en charge"
+                  : `${stats.horsDelai} pannes ont dépassé leur délai de prise en charge`}
+              </span>{" "}
+              — personne ne les a encore acceptées.{" "}
+              <Link
+                href="/superviseur/interventions?retard=1"
+                className="font-medium underline decoration-2 underline-offset-2"
+              >
+                Les affecter
+              </Link>
             </p>
           )}
           {stats.techniciensAValider > 0 && (
@@ -165,8 +183,12 @@ export default async function TableauDeBordSuperviseur({
         <Indicateur
           libelle="Sans technicien"
           valeur={stats.enAttente}
-          accent={ACCENTS.neutre}
-          precision="en attente d’affectation"
+          accent={stats.horsDelai > 0 ? ACCENTS.danger : ACCENTS.neutre}
+          precision={
+            stats.horsDelai > 0
+              ? `dont ${stats.horsDelai} hors délai`
+              : "toutes dans les délais"
+          }
         />
         <Indicateur
           libelle="En traitement"

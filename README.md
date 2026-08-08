@@ -25,6 +25,7 @@ Projet de fin d'études (stage BTP).
 - [Ce que fait l'application](#ce-que-fait-lapplication)
 - [Stack technique](#stack-technique)
 - [Schéma de la base](#schéma-de-la-base)
+- [Délais de prise en charge](#délais-de-prise-en-charge)
 - [Facturation et paiement](#facturation-et-paiement)
 - [Installation](#installation)
 - [Identifiants de démonstration](#identifiants-de-démonstration)
@@ -265,6 +266,75 @@ d'aiguillage d'échouer.
 
 ---
 
+## Délais de prise en charge
+
+Une priorité qui n'engage à rien n'est qu'une couleur. Chaque niveau porte donc
+un délai, en heures, dans lequel la société s'engage à ce qu'un technicien
+**accepte** la panne.
+
+| Priorité | Délai | Ce que ça veut dire |
+|---|---|---|
+| Urgente | 4 h | Un abonné totalement coupé |
+| Haute | 24 h | Une gêne sérieuse, mais la ligne fonctionne |
+| Normale | 72 h | Le cas courant |
+| Basse | 7 j | Confort, installation planifiée |
+
+**Le chronomètre s'arrête à l'acceptation, et ne repart pas.** Ce que dure
+ensuite la réparation dépend d'un câble dans le sol, pas de l'aiguillage ; le
+compter ici transformerait un chantier difficile en promesse rompue. Le délai
+mesure la seule chose que la société maîtrise vraiment : trouver quelqu'un.
+
+**Quatre heures pour une urgence, pas une.** Un objectif raté à chaque fois
+apprend à tout le monde à ignorer la couleur, ce qui est pire que de n'avoir
+aucun objectif. Un délai n'est utile que tant qu'on y croit.
+
+### Ce que ça change à l'écran
+
+Chaque panne encore sans technicien porte un badge : « Il reste 3 h 12 », puis
+« En retard de 6 h ». Il apparaît **chez le technicien et chez le superviseur,
+jamais chez l'abonné** — un délai montré au client devient un engagement que la
+société n'a pas pris, et « En retard de 6 h » sur l'écran de quelqu'un qui ne
+peut rien y faire est un reproche sans remède. Le jour où la société veut en
+faire une promesse publique, c'est un booléen à passer à `true`
+(`afficherEcheance` dans [components/interventions/ligne-intervention.tsx](components/interventions/ligne-intervention.tsx)).
+
+Le tableau de bord du technicien **classe par temps restant**, pas par étiquette
+de priorité. À âge égal une urgente passe toujours devant une haute — la
+priorité est déjà dans le délai qu'elle accorde. Ce que ce tri ajoute, c'est le
+vieillissement : une normale de trois jours passe devant une basse du matin.
+Surtout, la liste dit alors la même chose que le badge posé sur chaque ligne ;
+un tri par priorité qui reléguerait en bas une panne marquée « En retard »
+donnerait deux consignes contradictoires sur le même écran.
+
+Le superviseur voit le nombre de pannes hors délai sur son tableau de bord,
+reçoit une notification par panne concernée, et dispose d'un filtre **Délai →
+Hors délai** sur la liste des interventions. Le compteur et la liste derrière le
+lien viennent de la même clause SQL (`conditionHorsDelai` dans
+[lib/filtres.ts](lib/filtres.ts)), donc ils ne peuvent pas diverger.
+
+### Export comptable
+
+Le superviseur télécharge trois documents depuis [/superviseur/finances](app/superviseur/finances/page.tsx) :
+
+| Fichier | Contenu |
+|---|---|
+| `factures-AAAA-MM-JJ.csv` | Le registre complet, de la plus ancienne à la plus récente |
+| `factures-impayees-AAAA-MM-JJ.csv` | Les seules non soldées |
+| `paie-AAAA-MM.csv` | La paie d'un mois : fixe, commission, total, espèces détenues |
+
+Les montants sortent en **nombres nus à virgule décimale** (`105,500`), sans
+unité ni séparateur de milliers : une colonne « Montant » qui ne s'additionne
+pas dans Excel ne sert à rien. Cette virgule suppose un Excel français, ce qui
+est déjà l'hypothèse de [lib/csv.ts](lib/csv.ts) — les deux conventions vont de
+pair, on ne peut pas en changer une seule.
+
+Dans l'export de paie, « Espèces détenues » est la dernière colonne et reste à
+l'écart : ce n'est pas ce que la société doit, c'est ce que le technicien lui
+doit. Qui lit le fichier doit pouvoir additionner « À verser » sans que ce
+chiffre s'invite dans le total.
+
+---
+
 ## Facturation et paiement
 
 ### Qui doit quoi à qui
@@ -485,6 +555,10 @@ Deux détails du jeu de données sont volontaires et servent la démonstration :
 - **Rania est en zone Sousse, que personne ne couvre.** Sa panne n'apparaît
   chez aucun technicien, et le tableau de bord du superviseur l'affiche en
   alerte. Créez un technicien sur Sousse, ou affectez la panne à la main.
+  C'est aussi **la seule panne hors délai** du jeu de données : déclarée il y a
+  30 heures en priorité haute, dont le délai est de 24. Les deux faits vont
+  ensemble, et c'est tout l'intérêt — une zone sans technicien ne produit pas
+  une gêne abstraite, elle fait rater un engagement.
 - **Quatre factures restent impayées et un virement reste annoncé.** Sans
   elles, l'écran de paiement du client, celui d'encaissement du technicien et
   la file de confirmation du superviseur se démontreraient vides — ce qui
@@ -616,10 +690,15 @@ celui qui prétend l'avoir envoyé.
 15. Une facture peut être **corrigée ou annulée par le superviseur tant qu'aucun
     règlement n'a été confirmé**, avec un motif obligatoire que l'abonné lit sur
     son exemplaire. Après un règlement, même partiel, elle est figée.
+16. Chaque priorité porte un **délai de prise en charge**. Une panne encore
+    `NOUVELLE` au-delà de son délai est *hors délai* ; dès qu'un technicien
+    accepte, le chronomètre s'arrête et ne repart pas.
+17. Le tableau de bord du technicien classe par **temps restant**, pas par
+    étiquette de priorité, pour que la liste et les badges disent la même chose.
 
 ### Ces règles sont testées
 
-`npm test` exécute 77 tests.
+`npm test` exécute 89 tests.
 
 Les 25 premiers portent sur les règles métier et tournent contre une base
 SQLite jetable, construite à partir des vraies migrations : cycle complet des
@@ -661,6 +740,15 @@ en perdre par les chemins que l'application propose :
   fois aussi ;
 - une facture ne se corrige ni ne s'annule dès qu'un règlement est confirmé, et
   une facture annulée sort du chiffre d'affaires.
+
+Les 12 restants portent sur les délais et sur les deux formats que les exports
+utilisent. Tous sont des **fonctions pures** auxquelles l'instant courant est
+passé en paramètre : un objectif de quatre heures se vérifie en microsecondes
+au lieu de s'attendre, et le résultat ne dépend jamais de l'heure à laquelle la
+suite tourne. Ils vérifient notamment qu'une panne acceptée n'est jamais hors
+délai quel que soit son âge, qu'un `priorite` inconnu retombe sur le délai
+normal sans disparaître du décompte, et qu'un paramètre `mois` bricolé à la main
+retombe sur le mois en cours au lieu de casser la page.
 
 ### Traçabilité
 

@@ -232,6 +232,79 @@ export const PRIORITE_COULEURS: Record<Priorite, { hex: string; badge: string }>
 };
 
 /* -------------------------------------------------------------------------- */
+/* Delais de prise en charge                                                  */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * How long the company gives itself to *take on* a fault, in hours, by priority.
+ *
+ * The clock measures the promise the company can actually keep: a technician
+ * accepting the job. It stops at `ASSIGNEE` and never restarts — how long the
+ * repair itself takes depends on a cable in the ground, not on dispatch, and
+ * counting it here would turn a hard job into a broken promise.
+ *
+ * `URGENTE` is four hours rather than one: a one-hour target that is missed
+ * every single time teaches everyone to ignore the colour, which is worse than
+ * having no target at all. A deadline is only useful while it is believed.
+ */
+export const DELAIS_PRISE_EN_CHARGE: Record<Priorite, number> = {
+  URGENTE: 4,
+  HAUTE: 24,
+  NORMALE: 72,
+  BASSE: 168, // une semaine
+};
+
+export function delaiDe(priorite: string): number {
+  return estPriorite(priorite)
+    ? DELAIS_PRISE_EN_CHARGE[priorite]
+    : DELAIS_PRISE_EN_CHARGE.NORMALE;
+}
+
+/** Instant auquel la panne aurait dû être prise en charge. */
+export function echeancePriseEnCharge(dateCreation: Date, priorite: string): Date {
+  return new Date(dateCreation.getTime() + delaiDe(priorite) * 3_600_000);
+}
+
+/**
+ * Heures d'avance (positif) ou de retard (négatif) sur l'échéance.
+ *
+ * Fonction pure, l'instant courant passé en paramètre : une règle de délai qui
+ * lit l'horloge elle-même ne se teste qu'en attendant.
+ */
+export function heuresAvantEcheance(
+  dateCreation: Date,
+  priorite: string,
+  maintenant: Date,
+): number {
+  return (
+    (echeancePriseEnCharge(dateCreation, priorite).getTime() -
+      maintenant.getTime()) /
+    3_600_000
+  );
+}
+
+/**
+ * Une intervention est hors délai si elle attend encore un technicien
+ * au-delà de son échéance.
+ *
+ * Seul `NOUVELLE` compte : dès qu'un technicien l'a acceptée, la promesse est
+ * tenue, même si le chantier dure ensuite.
+ */
+export function estHorsDelai(
+  intervention: { statut: string; priorite: string; dateCreation: Date },
+  maintenant: Date = new Date(),
+): boolean {
+  if (intervention.statut !== "NOUVELLE") return false;
+  return (
+    heuresAvantEcheance(
+      intervention.dateCreation,
+      intervention.priorite,
+      maintenant,
+    ) < 0
+  );
+}
+
+/* -------------------------------------------------------------------------- */
 /* Types de panne                                                             */
 /* -------------------------------------------------------------------------- */
 
