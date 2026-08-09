@@ -54,6 +54,8 @@ Projet de fin d'études (stage BTP).
 /login                          formulaire unique, redirection selon le rôle
 /register                       inscription, réservée aux abonnés
 /register/technicien            candidature technicien (compte en attente)
+/mot-de-passe-oublie            demande d'un lien de réinitialisation
+/mot-de-passe-oublie/[jeton]    choix d'un nouveau mot de passe
 
 /client/dashboard               mes demandes + recherche et filtres
 /client/nouvelle-panne          déclaration, prix annoncé, photo facultative
@@ -139,6 +141,8 @@ erDiagram
         string   telephone
         string   statutCompte "ACTIF|EN_ATTENTE|DESACTIVE"
         datetime creeLe
+        string   jetonReset UK "empreinte SHA-256, nullable"
+        datetime jetonResetExpire "nullable"
     }
 
     Operateur {
@@ -569,7 +573,7 @@ l'abonné en apprenne rien s'il ne pensait pas à se reconnecter. C'est l'invers
 du bon sens : celui qui attend chez lui est celui qu'on prévient, pas celui qui
 doit aller vérifier.
 
-### Les sept messages
+### Les huit messages
 
 | Quand | À qui | Ce qu'il dit |
 |---|---|---|
@@ -580,6 +584,7 @@ doit aller vérifier.
 | Un règlement est confirmé | Abonné | Le reçu : montant, moyen, référence, reste à payer |
 | Le superviseur annule une demande | Abonné | Le motif, et comment en déclarer une autre |
 | Le superviseur valide une inscription | Technicien | Son matricule, son secteur, et que ce secteur ne dépend pas de lui |
+| Quelqu'un demande un lien de réinitialisation | Le compte visé | Le lien, sa durée, et quoi faire si la demande ne vient pas de lui |
 
 Deux silences sont volontaires. **Rien n'est envoyé quand c'est l'abonné qui
 annule sa propre demande** : il vient de cliquer sur le bouton, le lui
@@ -674,7 +679,7 @@ L'application démarre sur <http://localhost:3000>.
 ```bash
 npm run build       # build de production
 npm start           # lancer le build de production
-npm test            # règles métier, argent, délais, courriels (109 tests)
+npm test            # règles métier, argent, courriels, réinitialisation (123 tests)
 npm run test:watch  # tests en continu pendant le développement
 npm run lint        # ESLint
 npm run sauvegarde  # instantané horodaté de la base, dans sauvegardes/
@@ -892,7 +897,7 @@ celui qui prétend l'avoir envoyé.
 
 ### Ces règles sont testées
 
-`npm test` exécute 109 tests.
+`npm test` exécute 123 tests.
 
 **18** portent sur les règles métier et tournent contre une base
 SQLite jetable, construite à partir des vraies migrations : cycle complet des
@@ -954,6 +959,13 @@ port au hasard : accueil, `EHLO`, authentification, enveloppe, `DATA`. Du code
 de protocole écrit à la main auquel personne ne parle jamais est du code de
 protocole dont personne ne sait qu'il est cassé.
 
+**14** portent sur la réinitialisation de mot de passe, et sont écrits à
+l'envers : ils vérifient ce qui ne doit **pas** arriver. Que le jeton ne soit
+pas relisible depuis la base, qu'il ne survive pas à son heure, qu'il ne
+fonctionne pas deux fois — y compris quand deux soumissions partent en même
+temps — qu'une demande n'ouvre rien sur un compte en attente ou désactivé, et
+que demander un lien ne ferme pas la porte de connexion de la personne.
+
 **12** portent sur les délais et sur les deux formats que les exports
 utilisent. Tous sont des **fonctions pures** auxquelles l'instant courant est
 passé en paramètre : un objectif de quatre heures se vérifie en microsecondes
@@ -1003,7 +1015,8 @@ lib/
   monnaie.ts               montants en millimes, jamais en décimaux
   societe.ts               identité imprimée en tête de facture
   courrier.ts              composition RFC 5322 et client SMTP
-  courriels.ts             les sept messages et le moment où ils partent
+  courriels.ts             les huit messages et le moment où ils partent
+  reinitialisation.ts      jetons de mot de passe oublié
   validations.ts           schémas zod
   session.ts               exigerRole(), utilisateurConnecte()
   api.ts                   réponses et gestion d'erreurs communes
@@ -1057,6 +1070,15 @@ utilisé que pour les formulaires, les graphiques, la carte et les quelques
   est vérifié sur les octets du fichier, pas sur son extension.
 - **Redirection ouverte** empêchée : le paramètre `callbackUrl` n'est accepté
   que s'il désigne un chemin interne.
+- **Réinitialisation de mot de passe** (`lib/reinitialisation.ts`) : le jeton
+  n'est **jamais stocké**, seule son empreinte SHA-256 l'est — une base dérobée
+  ne doit pas livrer des liens utilisables. Il vaut 32 octets tirés au sort,
+  expire en une heure, et sa consommation est un `updateMany` conditionnel,
+  donc deux soumissions simultanées du même lien ne peuvent pas aboutir toutes
+  les deux. Le formulaire de demande répond **exactement la même chose** que
+  l'adresse existe ou non, sans quoi il deviendrait un annuaire des abonnés ;
+  et il porte son propre plafond, distinct de celui de la connexion, parce que
+  chaque appel envoie un courriel.
 - **Argent.** Aucun montant ne vient du navigateur : le reste à payer est
   toujours recalculé côté serveur, le montant d'une remise est déduit des
   encaissements en base, et un technicien ne peut encaisser que sur les

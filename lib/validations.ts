@@ -287,6 +287,28 @@ export const changementMotDePasseSchema = z
     message: "Le nouveau mot de passe doit être différent de l’actuel.",
   });
 
+/** Demande d'un lien de reinitialisation. */
+export const demandeReinitialisationSchema = z.object({
+  email: z.email("Adresse e-mail invalide."),
+});
+
+/**
+ * Choix d'un nouveau mot de passe par lien.
+ *
+ * Pas de champ « mot de passe actuel », evidemment : c'est celui qu'on a
+ * oublie. Le lien recu par courriel tient ce role, et lui seul.
+ */
+export const reinitialisationSchema = z
+  .object({
+    jeton: texteObligatoire("Le lien de réinitialisation"),
+    nouveau: motDePasseFort,
+    confirmation: z.string(),
+  })
+  .refine((d) => d.nouveau === d.confirmation, {
+    path: ["confirmation"],
+    message: "Les deux mots de passe ne correspondent pas.",
+  });
+
 /** Creation d'un compte technicien par le superviseur. */
 export const nouveauTechnicienSchema = z.object({
   prenom: texteObligatoire("Le prénom").max(50),

@@ -51,6 +51,15 @@ export default async function PageConnexion({
 
           <FormulaireConnexion callbackUrl={destination} />
 
+          <p className="mt-4 text-sm">
+            <Link
+              href="/mot-de-passe-oublie"
+              className="text-ardoise underline decoration-trait underline-offset-4 hover:text-signal-profond hover:decoration-signal"
+            >
+              Mot de passe oublié ?
+            </Link>
+          </p>
+
           <div className="mt-6 space-y-2 border-t border-trait pt-5 text-sm text-ardoise">
             <p>
               Vous êtes abonné et vous n’avez pas encore de compte ?{" "}

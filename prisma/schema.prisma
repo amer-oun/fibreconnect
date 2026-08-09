@@ -29,6 +29,19 @@ model Utilisateur {
   statutCompte String   @default("ACTIF")
   creeLe       DateTime @default(now())
 
+  // Reinitialisation du mot de passe.
+  //
+  // Le jeton n'est PAS stocke : seule son empreinte SHA-256 l'est. Une base
+  // derobee, ou une sauvegarde egaree, ne doit pas livrer des liens de
+  // reinitialisation utilisables -- c'est le meme raisonnement que pour le
+  // mot de passe lui-meme.
+  //
+  // @unique parce que le compte se retrouve par cette empreinte. SQLite
+  // considere les NULL comme distincts, donc les innombrables comptes sans
+  // demande en cours ne se genent pas entre eux.
+  jetonReset       String?   @unique
+  jetonResetExpire DateTime?
+
   // Profil metier : au plus un des deux selon le role.
   client     Client?
   technicien Technicien?

@@ -269,6 +269,31 @@ export function lettreTechnicienValide(donnees: {
   };
 }
 
+export function lettreReinitialisation(donnees: {
+  courriel: string;
+  prenom: string;
+  nom: string;
+  jeton: string;
+  dureeMinutes: number;
+}): Lettre {
+  return {
+    a: donnees.courriel,
+    nom: `${donnees.prenom} ${donnees.nom}`,
+    sujet: `Choisir un nouveau mot de passe ${SOCIETE.nom}`,
+    texte: corps(
+      `Bonjour ${donnees.prenom},`,
+      `Vous avez demandé à choisir un nouveau mot de passe pour votre espace ${SOCIETE.nom}.`,
+      `Ce lien est valable ${donnees.dureeMinutes} minutes et ne peut servir qu’une seule fois :\n${lienVers(
+        `/mot-de-passe-oublie/${donnees.jeton}`,
+      )}`,
+      // Sans cette phrase, quelqu'un qui reçoit ce message sans l'avoir
+      // demandé croit son compte compromis et n'a aucune conduite à tenir.
+      "Si vous n’êtes pas à l’origine de cette demande, ignorez ce message : " +
+        "votre mot de passe actuel reste valable et personne n’a eu accès à votre compte.",
+    ),
+  };
+}
+
 /* -------------------------------------------------------------------------- */
 /* Les envois : lecture en base, puis remise au facteur                       */
 /* -------------------------------------------------------------------------- */
@@ -470,6 +495,25 @@ export function prevenirAnnulationParLaSociete(
       motif,
     });
   });
+}
+
+/**
+ * Le lien de réinitialisation.
+ *
+ * Le jeton est passé en paramètre parce qu'il n'est lisible qu'une fois : la
+ * base n'en garde que l'empreinte, ce module ne peut donc pas aller le
+ * chercher — c'est précisément ce qu'on veut.
+ */
+export function envoyerLienReinitialisation(demande: {
+  jeton: string;
+  courriel: string;
+  prenom: string;
+  nom: string;
+  dureeMinutes: number;
+}) {
+  return poster("réinitialisation", async () =>
+    lettreReinitialisation(demande),
+  );
 }
 
 /**

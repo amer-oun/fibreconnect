@@ -144,6 +144,61 @@ export function oublierEchecs(email: string, adresseIp: string) {
   tentatives.delete(cleAdresse(adresseIp));
 }
 
+/**
+ * Oublie les échecs d'un seul compte, sans toucher au compteur de l'adresse.
+ *
+ * Appelé après une réinitialisation de mot de passe réussie : quelqu'un qui
+ * vient de prouver qu'il relève ses courriels ne doit pas se voir refuser la
+ * connexion pendant un quart d'heure de plus. Le compteur par adresse, lui,
+ * reste debout — sinon réinitialiser un compte qu'on possède effacerait le
+ * blocage d'une machine qui essaie des mots de passe partout.
+ */
+export function oublierEchecsDuCompte(email: string) {
+  tentatives.delete(cleCompte(email));
+}
+
+/* -------------------------------------------------------------------------- */
+/* Demandes de reinitialisation                                               */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * Le formulaire « mot de passe oublié » envoie un courriel à chaque appel.
+ * Sans plafond, il devient une machine à inonder la boîte de n'importe qui.
+ *
+ * Compteurs distincts de ceux de la connexion : une demande de lien n'est pas
+ * un échec d'authentification, et se tromper trois fois de bouton ne doit pas
+ * fermer la porte d'entrée.
+ */
+export const MAX_DEMANDES_RESET = 3;
+export const MAX_DEMANDES_RESET_PAR_ADRESSE = 10;
+
+const cleResetCompte = (email: string) => `reset:${cleCompte(email)}`;
+const cleResetAdresse = (adresseIp: string) => `reset:${cleAdresse(adresseIp)}`;
+
+/** Secondes à attendre avant une nouvelle demande, 0 si elle est autorisée. */
+export function secondesAvantNouvelleDemande(
+  email: string,
+  adresseIp: string,
+  maintenant = Date.now(),
+): number {
+  return Math.max(
+    secondesRestantes(cleResetCompte(email), maintenant),
+    secondesRestantes(cleResetAdresse(adresseIp), maintenant),
+  );
+}
+
+/** À appeler à chaque demande, qu'elle aboutisse ou non à un envoi. */
+export function enregistrerDemande(
+  email: string,
+  adresseIp: string,
+  maintenant = Date.now(),
+) {
+  if (tentatives.size > TAILLE_AVANT_NETTOYAGE) nettoyer(maintenant);
+
+  compterEchec(cleResetCompte(email), MAX_DEMANDES_RESET, maintenant);
+  compterEchec(cleResetAdresse(adresseIp), MAX_DEMANDES_RESET_PAR_ADRESSE, maintenant);
+}
+
 /** Remise à zéro complète — utilisée par les tests. */
 export function reinitialiserLimitation() {
   tentatives.clear();
