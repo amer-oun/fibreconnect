@@ -1,5 +1,8 @@
+import { after } from "next/server";
+
 import { prisma } from "@/lib/prisma";
 import { changerStatut, ErreurMetier } from "@/lib/interventions";
+import { prevenirAnnulationParLaSociete } from "@/lib/courriels";
 import { annulationSchema } from "@/lib/validations";
 import {
   lireCorps,
@@ -62,6 +65,11 @@ export async function POST(
           ? `Annulée par le superviseur : ${motif}`
           : "Annulée par le superviseur",
       });
+
+      // Seule cette branche ecrit a l'abonne : quand c'est lui qui renonce, il
+      // vient de cliquer sur le bouton, le lui apprendre par courriel n'aurait
+      // aucun sens.
+      after(() => prevenirAnnulationParLaSociete(id, motif ?? null));
 
       return reponseOk({ id });
     }

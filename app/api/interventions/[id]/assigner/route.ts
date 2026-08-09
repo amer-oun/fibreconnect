@@ -1,5 +1,8 @@
+import { after } from "next/server";
+
 import { prisma } from "@/lib/prisma";
 import { changerStatut, ErreurMetier } from "@/lib/interventions";
+import { prevenirAcceptation } from "@/lib/courriels";
 import { assignationSchema } from "@/lib/validations";
 import {
   exigerRoleApi,
@@ -99,6 +102,8 @@ export async function POST(
         },
       });
 
+      after(() => prevenirAcceptation(id));
+
       return reponseOk({ id });
     }
 
@@ -122,6 +127,8 @@ export async function POST(
         },
       });
     });
+
+    after(() => prevenirAcceptation(id, { reaffectation: true }));
 
     return reponseOk({ id });
   } catch (erreur) {

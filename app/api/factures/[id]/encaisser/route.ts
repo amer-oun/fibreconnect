@@ -1,6 +1,9 @@
+import { after } from "next/server";
+
 import { prisma } from "@/lib/prisma";
 import { ErreurMetier } from "@/lib/interventions";
 import { encaisserEspeces, exigerFactureDuTechnicien } from "@/lib/facturation";
+import { prevenirPaiement } from "@/lib/courriels";
 import { encaissementSchema } from "@/lib/validations";
 import { exigerRoleApi, lireCorps, reponseOk, traiterErreur } from "@/lib/api";
 
@@ -34,6 +37,10 @@ export async function POST(
       technicienId: technicien.id,
       montant,
     });
+
+    // Des especes remises de la main a la main laissent l'abonne sans trace :
+    // le recu par courriel en est une, du cote de la societe.
+    after(() => prevenirPaiement(paiement.reference));
 
     return reponseOk({ reference: paiement.reference, montant: paiement.montant });
   } catch (erreur) {

@@ -1,3 +1,5 @@
+import { after } from "next/server";
+
 import { prisma } from "@/lib/prisma";
 import {
   changerStatut,
@@ -5,6 +7,7 @@ import {
   exigerProprieteTechnicien,
 } from "@/lib/interventions";
 import { emettreFacture } from "@/lib/facturation";
+import { prevenirCloture } from "@/lib/courriels";
 import { rapportSchema } from "@/lib/validations";
 import {
   exigerRoleApi,
@@ -55,6 +58,10 @@ export async function POST(
           pieces,
         }).then(() => undefined),
     });
+
+    // La facture existe forcement a ce stade : elle est nee dans la
+    // transaction ci-dessus. Le message peut donc la citer sans la chercher.
+    after(() => prevenirCloture(id));
 
     return reponseOk({ id });
   } catch (erreur) {

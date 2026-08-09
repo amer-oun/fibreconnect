@@ -1,5 +1,8 @@
+import { after } from "next/server";
+
 import { prisma } from "@/lib/prisma";
 import { ErreurMetier } from "@/lib/interventions";
+import { prevenirAcceptation } from "@/lib/courriels";
 import { exigerRoleApi, reponseOk, traiterErreur } from "@/lib/api";
 
 /**
@@ -92,6 +95,10 @@ export async function POST(
         409,
       );
     }
+
+    // Apres la reponse : l'abonne apprend qui vient et quand, sans que le
+    // technicien attende un serveur de courrier devant son telephone.
+    after(() => prevenirAcceptation(id));
 
     return reponseOk({ id });
   } catch (erreur) {

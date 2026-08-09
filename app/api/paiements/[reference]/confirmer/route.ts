@@ -1,6 +1,9 @@
+import { after } from "next/server";
+
 import { prisma } from "@/lib/prisma";
 import { ErreurMetier } from "@/lib/interventions";
 import { confirmerPaiement } from "@/lib/facturation";
+import { prevenirPaiement } from "@/lib/courriels";
 import { utilisateurConnecte } from "@/lib/session";
 import { empreintePaiementSchema } from "@/lib/validations";
 import { lireCorps, reponseOk, traiterErreur } from "@/lib/api";
@@ -76,6 +79,11 @@ export async function POST(
           : null;
 
     await confirmerPaiement(reference, detail);
+
+    // Le recu part une fois le paiement confirme, jamais a son ouverture : un
+    // virement annonce n'est pas un virement recu.
+    after(() => prevenirPaiement(reference));
+
     return reponseOk({ reference });
   } catch (erreur) {
     return traiterErreur(erreur);

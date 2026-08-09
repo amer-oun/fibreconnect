@@ -1,9 +1,12 @@
+import { after } from "next/server";
+
 import { prisma } from "@/lib/prisma";
 import {
   changerStatut,
   ErreurMetier,
   exigerProprieteTechnicien,
 } from "@/lib/interventions";
+import { prevenirDemarrage } from "@/lib/courriels";
 import { exigerRoleApi, reponseOk, traiterErreur } from "@/lib/api";
 
 /** Le technicien démarre une intervention qui lui est affectée. */
@@ -34,6 +37,8 @@ export async function POST(
       commentaire: "Technicien sur place",
       champs: { dateDebut: new Date() },
     });
+
+    after(() => prevenirDemarrage(id));
 
     return reponseOk({ id });
   } catch (erreur) {

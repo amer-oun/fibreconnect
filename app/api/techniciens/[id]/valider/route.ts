@@ -1,5 +1,8 @@
+import { after } from "next/server";
+
 import { prisma } from "@/lib/prisma";
 import { ErreurMetier } from "@/lib/interventions";
+import { prevenirTechnicienValide } from "@/lib/courriels";
 import { validationTechnicienSchema } from "@/lib/validations";
 import {
   exigerRoleApi,
@@ -60,6 +63,10 @@ export async function POST(
         data: { statutCompte: "ACTIF" },
       }),
     ]);
+
+    // Le candidat ne pouvait pas se connecter hier et le peut aujourd'hui :
+    // sans ce message, rien ne le lui apprenait.
+    after(() => prevenirTechnicienValide(id));
 
     return reponseOk({ id, matricule, zone });
   } catch (erreur) {

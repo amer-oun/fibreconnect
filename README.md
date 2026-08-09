@@ -27,6 +27,7 @@ Projet de fin d'études (stage BTP).
 - [Schéma de la base](#schéma-de-la-base)
 - [Délais de prise en charge](#délais-de-prise-en-charge)
 - [Facturation et paiement](#facturation-et-paiement)
+- [Courriels](#courriels)
 - [Installation](#installation)
 - [Identifiants de démonstration](#identifiants-de-démonstration)
 - [Règles métier](#règles-métier)
@@ -559,6 +560,87 @@ la société, et ce que la société a déjà accusé recevoir.
 
 ---
 
+## Courriels
+
+Une intervention pouvait être acceptée, démarrée, close et facturée sans que
+l'abonné en apprenne rien s'il ne pensait pas à se reconnecter. C'est l'inverse
+du bon sens : celui qui attend chez lui est celui qu'on prévient, pas celui qui
+doit aller vérifier.
+
+### Les sept messages
+
+| Quand | À qui | Ce qu'il dit |
+|---|---|---|
+| Un technicien accepte, ou le superviseur affecte | Abonné | Qui vient, son matricule, son téléphone |
+| Le superviseur réaffecte | Abonné | Le technicien a changé |
+| Le technicien démarre | Abonné | Il est sur place ; la facture suivra |
+| Clôture | Abonné | Le rapport, le détail de la facture, les liens pour régler et imprimer |
+| Un règlement est confirmé | Abonné | Le reçu : montant, moyen, référence, reste à payer |
+| Le superviseur annule une demande | Abonné | Le motif, et comment en déclarer une autre |
+| Le superviseur valide une inscription | Technicien | Son matricule, son secteur, et que ce secteur ne dépend pas de lui |
+
+Deux silences sont volontaires. **Rien n'est envoyé quand c'est l'abonné qui
+annule sa propre demande** : il vient de cliquer sur le bouton, le lui
+apprendre par courriel serait absurde. Et **le reçu part à la confirmation du
+règlement, jamais à son ouverture** : un virement annoncé n'est pas un virement
+reçu.
+
+Le message de validation comble un trou réel. Un candidat technicien voyait
+sa connexion refusée la veille et acceptée le lendemain, sans que rien ne le
+lui dise.
+
+### Trois transports, écrits à la main
+
+Aucune dépendance n'a été ajoutée — c'est une règle du projet. `lib/courrier.ts`
+compose le message selon la RFC 5322 et parle SMTP directement, en une
+soixantaine de lignes de protocole.
+
+| `COURRIER_TRANSPORT` | Ce qu'il fait |
+|---|---|
+| `fichier` *(défaut)* | Dépose un `.eml` dans `courrier/`, ouvrable dans n'importe quel logiciel de messagerie. Rien ne quitte la machine |
+| `smtp` | Envoie réellement. Sélectionné tout seul dès que `SMTP_HOTE` est renseigné |
+| `silencieux` | Compose et jette. Utilisé par les tests |
+
+```bash
+SMTP_HOTE="smtp.exemple.tn"
+SMTP_PORT="587"          # 465 = TLS direct, 587 = STARTTLS
+SMTP_UTILISATEUR="contact@fibreconnect.tn"
+SMTP_MOTDEPASSE="…"
+```
+
+Sans compte d'envoi, l'application reste entièrement utilisable : le mode
+`fichier` produit les mêmes messages, sur le disque. C'est une différence de
+destination, pas de fonctionnement.
+
+### Deux détails qui décident du reste
+
+**Le corps est toujours en base64.** Ce n'est pas une coquetterie : SMTP
+interdit qu'une ligne du corps commence par un point seul — elle terminerait
+la transmission au milieu du message — et limite les lignes à 1000 octets. Le
+base64 ne contient aucun point et se replie à 76 caractères, donc les deux
+pièges disparaissent au lieu d'être contournés. Même raisonnement pour les
+en-têtes : « Intervention terminée » n'est pas de l'ASCII, et un accent non
+encodé arrive en charabia dans la moitié des logiciels de messagerie.
+
+**Les retours à la ligne sont retirés de tout en-tête.** Les noms viennent du
+formulaire d'inscription, donc de l'extérieur : un nom contenant `\r\n`
+ajouterait un en-tête arbitraire — un `Bcc:` par exemple — à un message que la
+société signe. C'est testé.
+
+### L'envoi ne bloque jamais une intervention
+
+Les notifications partent depuis `after()` de Next.js, c'est-à-dire **après**
+que la réponse HTTP est partie. Un technicien qui clôture une intervention
+n'attend pas un serveur de courrier devant son téléphone, et un serveur SMTP en
+panne ne transforme pas une clôture réussie en erreur à l'écran. Les échecs
+sont journalisés côté serveur.
+
+Les fonctions `lettre…` de `lib/courriels.ts` sont **pures** : elles prennent
+des valeurs et rendent un message. La formulation se teste donc sans base, sans
+serveur de courrier et sans horloge.
+
+---
+
 ## Installation
 
 **Prérequis** : Node.js 20.9 ou plus récent.
@@ -590,7 +672,7 @@ L'application démarre sur <http://localhost:3000>.
 ```bash
 npm run build       # build de production
 npm start           # lancer le build de production
-npm test            # règles métier, argent, délais, pagination (90 tests)
+npm test            # règles métier, argent, délais, courriels (109 tests)
 npm run test:watch  # tests en continu pendant le développement
 npm run lint        # ESLint
 npm run sauvegarde  # instantané horodaté de la base, dans sauvegardes/
@@ -799,13 +881,16 @@ celui qui prétend l'avoir envoyé.
     accepte, le chronomètre s'arrête et ne repart pas.
 17. Le tableau de bord du technicien classe par **temps restant**, pas par
     étiquette de priorité, pour que la liste et les badges disent la même chose.
-19. Les lignes de facture sont **hors taxes** ; la TVA et le droit de timbre
-    s'ajoutent au pied, avec un taux **figé sur la facture**. La commission du
-    technicien porte sur le hors-taxes : la TVA n'appartient pas à la société.
+18. Les lignes de facture sont **hors taxes** ; la TVA et le droit de timbre
+    s'ajoutent au pied, avec un taux **figé sur la facture** — une facture
+    ancienne doit se relire avec les taux de son époque.
+19. L'abonné est **prévenu par courriel** à chaque étape qui le concerne :
+    prise en charge, démarrage, clôture avec la facture, reçu de règlement,
+    annulation par la société. Pas quand c'est lui qui annule.
 
 ### Ces règles sont testées
 
-`npm test` exécute 90 tests.
+`npm test` exécute 109 tests.
 
 Les 25 premiers portent sur les règles métier et tournent contre une base
 SQLite jetable, construite à partir des vraies migrations : cycle complet des
@@ -850,6 +935,16 @@ en perdre par les chemins que l'application propose :
 - une facture porte son propre taux de TVA et son propre timbre, et son total
   TTC est toujours la somme du hors-taxes, de la TVA et du timbre — y compris
   après une correction.
+
+19 portent sur les courriels. La moitié vérifie la composition du message :
+qu'un sujet accentué se recolle exactement après découpage en mots encodés,
+qu'aucune ligne du corps ne commence par un point — celle-là terminerait la
+transmission SMTP au milieu du message — et qu'un nom d'utilisateur contenant
+un retour à la ligne ne peut pas ajouter d'en-tête au message. L'autre moitié
+fait parler le client SMTP à un **vrai serveur SMTP lancé par le test**, sur un
+port au hasard : accueil, `EHLO`, authentification, enveloppe, `DATA`. Du code
+de protocole écrit à la main auquel personne ne parle jamais est du code de
+protocole dont personne ne sait qu'il est cassé.
 
 Les 12 restants portent sur les délais et sur les deux formats que les exports
 utilisent. Tous sont des **fonctions pures** auxquelles l'instant courant est
@@ -896,11 +991,11 @@ lib/
   constants.ts             valeurs autorisées, libellés, couleurs de statut
   prisma.ts                singleton du client Prisma
   interventions.ts         changerStatut() et contrôles de propriété
-  facturation.ts           émission, solde, encaissement, remises, paie
+  facturation.ts           émission, solde, encaissement, remises
   monnaie.ts               montants en millimes, jamais en décimaux
   societe.ts               identité imprimée en tête de facture
-scripts/
-  sauvegarde.ts            instantané SQLite cohérent (VACUUM INTO)
+  courrier.ts              composition RFC 5322 et client SMTP
+  courriels.ts             les sept messages et le moment où ils partent
   validations.ts           schémas zod
   session.ts               exigerRole(), utilisateurConnecte()
   api.ts                   réponses et gestion d'erreurs communes
@@ -910,6 +1005,9 @@ scripts/
   pagination.ts            bornes de page, liens qui gardent les filtres
   limitation.ts            blocage des tentatives de connexion
   televersement.ts         enregistrement et contrôle des photos
+scripts/
+  sauvegarde.ts            instantané SQLite cohérent (VACUUM INTO)
+  creer-superviseur.ts     création du compte administrateur
 proxy.ts                   protection des routes par rôle
 prisma/
   schema.prisma  seed.ts  migrations/
@@ -1155,3 +1253,16 @@ l'ensemble des lignes. Une pièce détachée relevant d'un taux différent
 demanderait un taux **par ligne** et des sous-totaux par taux — un changement de
 modèle, et surtout une question comptable : savoir ce qui est assujetti à quoi
 n'est pas une décision technique.
+
+**Un courriel perdu ne laisse aucune trace en base.** Il n'y a pas de table de
+journal d'envoi, pour la même raison qu'il n'y a pas de table `Notification` :
+un doublon est déjà impossible, puisque chaque message suit une transition que
+`changerStatut` refuse de rejouer. En contrepartie, un message refusé par le
+serveur de courrier n'apparaît que dans le journal du serveur — et dans
+`courrier/` quand le transport fichier est actif. Il n'y a pas non plus de file
+d'attente : un envoi échoué n'est pas réessayé.
+
+**Le chiffrement SMTP n'est pas couvert par les tests.** Le dialogue complet
+l'est, contre un vrai serveur SMTP lancé par le test lui-même — mais TLS se
+négocie en dessous et demanderait un certificat. C'est la partie du client
+qu'il faudra vérifier contre le premier hébergeur réel.

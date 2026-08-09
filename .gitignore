@@ -51,3 +51,7 @@ next-env.d.ts
 
 # sauvegardes de la base (npm run sauvegarde) : ce sont des donnees, pas du code
 /sauvegardes
+
+# courriels deposes par le transport « fichier » : ils contiennent des adresses
+# et des montants d'abonnes reels des que l'application sert
+/courrier
