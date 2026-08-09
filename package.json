@@ -9,7 +9,8 @@
     "lint": "eslint",
     "test": "vitest run",
     "test:watch": "vitest",
-    "sauvegarde": "tsx scripts/sauvegarde.ts"
+    "sauvegarde": "tsx scripts/sauvegarde.ts",
+    "creer-superviseur": "tsx scripts/creer-superviseur.ts"
   },
   "prisma": {
     "seed": "tsx prisma/seed.ts"

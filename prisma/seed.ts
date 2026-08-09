@@ -41,10 +41,53 @@ type Etape = {
   commentaire?: string;
 };
 
+/**
+ * Refuses to run against anything that looks like a live database.
+ *
+ * This script's first act is to delete every row. That is exactly what a demo
+ * dataset should do and exactly what a running service must never suffer — and
+ * the two are one `npx prisma db seed` apart. `npm run creer-superviseur` is
+ * the script that creates an account without destroying anything.
+ */
+function verifierEnvironnement() {
+  if (process.env.NODE_ENV === "production") {
+    console.error(
+      "\n  Refus : NODE_ENV vaut « production ».\n\n" +
+        "  Ce script efface toutes les données avant de recréer le jeu de\n" +
+        "  démonstration. Pour créer un compte sans rien détruire :\n\n" +
+        "    npm run creer-superviseur -- --aide\n",
+    );
+    process.exit(1);
+  }
+
+  if (process.env.SEED_FORCE === "1") return;
+
+  return async (prisma: PrismaClient) => {
+    const interventions = await prisma.intervention.count();
+    const factures = await prisma.facture.count();
+    if (interventions === 0 && factures === 0) return;
+
+    // Le jeu de demonstration en compte 33 : au-dela, la base a servi.
+    if (interventions > 60 || factures > 40) {
+      console.error(
+        `\n  Refus : la base contient ${interventions} interventions et ` +
+          `${factures} factures.\n\n` +
+          "  Elle ne ressemble pas au jeu de démonstration, et ce script\n" +
+          "  efface tout avant de recommencer. Faites une sauvegarde\n" +
+          "  (npm run sauvegarde), puis relancez avec SEED_FORCE=1 si vous\n" +
+          "  êtes certain de vouloir tout perdre.\n",
+      );
+      process.exit(1);
+    }
+  };
+}
+
 async function main() {
+  const controle = verifierEnvironnement();
+  if (controle) await controle(prisma);
+
   console.log("Nettoyage de la base...");
   // Ordre imposé par les clés étrangères : les enfants d'abord.
-  await prisma.bulletinPaie.deleteMany();
   await prisma.paiement.deleteMany();
   await prisma.versement.deleteMany();
   await prisma.ligneFacture.deleteMany();
@@ -1022,81 +1065,6 @@ async function main() {
   }
 
   /* ---------------------------------------------------------------------- */
-  /* Paie du mois précédent, déjà versée                                    */
-  /* ---------------------------------------------------------------------- */
-
-  /**
-   * The previous month is paid, the current one is not.
-   *
-   * Both states have to be on screen at once: a payroll table where every row
-   * says "Versée le…" would never show the button, and one where no row does
-   * would never show what a paid month looks like. The month navigation on the
-   * finances page then has somewhere to go.
-   */
-  console.log("Enregistrement de la paie du mois précédent...");
-
-  const moisPrecedent = new Date(
-    new Date().getFullYear(),
-    new Date().getMonth() - 1,
-    1,
-  );
-  const finMoisPrecedent = new Date(
-    moisPrecedent.getFullYear(),
-    moisPrecedent.getMonth() + 1,
-    0,
-    23,
-    59,
-    59,
-    999,
-  );
-  const clePrecedent = `${moisPrecedent.getFullYear()}-${String(
-    moisPrecedent.getMonth() + 1,
-  ).padStart(2, "0")}`;
-
-  for (const technicien of [karim, sonia, mehdi, amine, yosr]) {
-    const facturesDuMois = await prisma.facture.findMany({
-      where: {
-        statut: { not: "ANNULEE" },
-        intervention: {
-          technicienId: technicien.id,
-          statut: "TERMINEE",
-          dateFin: { gte: moisPrecedent, lte: finMoisPrecedent },
-        },
-      },
-      select: { montantHT: true },
-    });
-
-    const chiffreAffaires = facturesDuMois.reduce(
-      (s, f) => s + f.montantHT,
-      0,
-    );
-    const commission = Math.round(chiffreAffaires * technicien.tauxCommission);
-
-    await prisma.bulletinPaie.create({
-      data: {
-        technicienId: technicien.id,
-        mois: clePrecedent,
-        salaireBase: technicien.salaireBase,
-        tauxCommission: technicien.tauxCommission,
-        interventions: facturesDuMois.length,
-        chiffreAffaires,
-        commission,
-        montantTotal: technicien.salaireBase + commission,
-        // Versée le 5 du mois suivant, comme une paie ordinaire.
-        dateVersement: new Date(
-          moisPrecedent.getFullYear(),
-          moisPrecedent.getMonth() + 1,
-          5,
-          10,
-          0,
-        ),
-        versePar: superviseur.id,
-        commentaire: "Virement bancaire",
-      },
-    });
-  }
-
-  /* ---------------------------------------------------------------------- */
   /* Récapitulatif                                                          */
   /* ---------------------------------------------------------------------- */
 
@@ -1126,7 +1094,6 @@ async function main() {
   console.log(`  Factures      : ${await prisma.facture.count()}`);
   console.log(`  Paiements     : ${await prisma.paiement.count()}`);
   console.log(`  Versements    : ${await prisma.versement.count()}`);
-  console.log(`  Bulletins     : ${await prisma.bulletinPaie.count()}`);
   console.log("\n  Identifiants de connexion");
   console.log(`  Mot de passe commun a tous les comptes : ${MOT_DE_PASSE_DEMO}\n`);
   console.table(comptes);
