@@ -43,7 +43,7 @@ Projet de fin d'études (stage BTP).
 
 | Rôle | Ce qu'il peut faire |
 |---|---|
-| **Client** | S'inscrire seul, déclarer une panne avec photo, suivre son avancement étape par étape, l'annuler, **régler sa facture**, noter le technicien une fois l'intervention terminée |
+| **Client** | S'inscrire seul, déclarer une panne avec photo **au tarif annoncé**, suivre son avancement étape par étape, l'annuler, **régler sa facture**, noter le technicien une fois l'intervention terminée. Il est **prévenu par courriel** à chaque étape sans avoir à revenir voir |
 | **Technicien** | S'inscrire seul (compte à valider), consulter les pannes **de sa zone**, les accepter, les démarrer, rédiger le rapport de clôture avec photo et les pièces facturées, **encaisser les espèces et les remettre à la société**, gérer son profil |
 | **Superviseur** | Piloter l'activité : statistiques, couverture des zones, validation des inscriptions techniciens, attribution des matricules et des zones, affectation manuelle, carte des abonnés, **finances de la société** |
 
@@ -351,14 +351,17 @@ l'architecture financière de l'application.
                  │                                     ▲    │
                  │  espèces                            │    │
                  └──────▶  Technicien  ──── remise ────┘    │
-                                 ▲                          │
-                                 └──── fixe + commission ────┘
+                                                            │
+                 └──────────────────────────────────────────┘
 ```
 
 Les espèces sont le seul cas où l'argent transite par quelqu'un. Le technicien
-qui encaisse 120 DT sur le trottoir ne les a pas gagnés : il les **détient pour
+qui encaisse 30 DT sur le trottoir ne les a pas gagnés : il les **détient pour
 le compte de la société**, et cette dette ne s'éteint qu'au moment où le
 superviseur accuse réception de la remise.
+
+Aucune flèche ne part de la société vers le technicien : ce que l'entreprise
+verse à ses salariés est hors périmètre — voir [plus bas](#ce-que-lapplication-ne-fait-pas--la-paie).
 
 ### Les quatre moyens de paiement
 
@@ -432,24 +435,23 @@ l'abonné doit, et donc ce que les règlements soldent.
 
 | | |
 |---|---|
-| Déplacement — Coupure totale | 80,000 DT |
-| **Total hors taxes** | 80,000 DT |
-| TVA 19 % | 15,200 DT |
+| Déplacement — Coupure totale | 25,000 DT |
+| **Total hors taxes** | 25,000 DT |
+| TVA 19 % | 4,750 DT |
 | Droit de timbre | 1,000 DT |
-| **Total toutes taxes comprises** | **96,200 DT** |
+| **Total toutes taxes comprises** | **30,750 DT** |
 
 Le taux et le timbre sont **recopiés sur chaque facture à son émission**, jamais
 relus dans `lib/constants.ts` au moment de l'affichage. Un taux de TVA change
 par décision budgétaire ; une facture de l'an dernier dont le total se
 recalculerait au taux du jour ne correspondrait plus à ce que l'abonné a payé.
-C'est le même raisonnement que pour le bulletin de paie, qui fige les siens.
+Une facture doit se relire avec les taux de son époque.
 
-**La commission du technicien porte sur le hors-taxes.** La TVA et le timbre
-sont encaissés pour le compte de l'État : ils transitent par la société sans
-jamais lui appartenir. Commissionner dessus reviendrait à payer le technicien
-sur de l'argent que l'entreprise doit reverser. Pour la même raison, le tableau
-de bord affiche un « chiffre d'affaires » hors taxes et la page Finances
-distingue le facturé TTC de la TVA à reverser.
+**La TVA et le timbre ne sont pas de l'argent de la société.** Ils sont
+encaissés pour le compte de l'État et transitent sans jamais lui appartenir.
+C'est pourquoi la page Finances affiche le facturé en TTC — ce que les abonnés
+doivent — en précisant dessous la part de TVA à reverser, plutôt qu'un seul
+chiffre qui mélangerait les deux.
 
 Une seule fonction calcule ces quatre montants — `totauxFacture` dans
 [lib/constants.ts](lib/constants.ts) — utilisée par l'émission, la correction,
@@ -892,7 +894,7 @@ celui qui prétend l'avoir envoyé.
 
 `npm test` exécute 109 tests.
 
-Les 25 premiers portent sur les règles métier et tournent contre une base
+**18** portent sur les règles métier et tournent contre une base
 SQLite jetable, construite à partir des vraies migrations : cycle complet des
 statuts, refus des transitions illégales, absence d'écriture d'historique quand
 une transition est refusée, filtre par zone, contrôles de propriété, notation
@@ -908,16 +910,16 @@ Deux d'entre eux méritent d'être signalés :
   même panne en parallèle : le test vérifie qu'un seul `updateMany` touche une
   ligne, l'autre zéro.
 
-Les 12 suivants portent sur la limitation des tentatives de connexion. Le
+**12** portent sur la limitation des tentatives de connexion. Le
 limiteur reçoit l'instant courant en paramètre, si bien qu'une fenêtre de
 quinze minutes se vérifie en quelques microsecondes et que le résultat ne
 dépend jamais de la vitesse de la machine.
 
-13 autres portent sur la pagination : qu'aucune ligne ne soit sautée ni
+**13** portent sur la pagination : qu'aucune ligne ne soit sautée ni
 comptée deux fois en parcourant toutes les pages, qu'une URL bricolée à la main
 retombe sur une page valide, et que les liens de page conservent les filtres.
 
-30 portent sur l’argent, et vérifient qu'on ne peut ni en créer ni
+**28** portent sur l’argent, et vérifient qu'on ne peut ni en créer ni
 en perdre par les chemins que l'application propose :
 
 - une confirmation de paiement **rejouée trois fois** ne compte l'encaissement
@@ -936,7 +938,13 @@ en perdre par les chemins que l'application propose :
   TTC est toujours la somme du hors-taxes, de la TVA et du timbre — y compris
   après une correction.
 
-19 portent sur les courriels. La moitié vérifie la composition du message :
+**7** portent sur l'export comptable : qu'un point-virgule ou un guillemet dans
+une désignation n'ouvre pas une colonne de plus, et qu'une valeur commençant par
+`=`, `+`, `-` ou `@` soit neutralisée — Excel l'exécuterait comme une formule,
+ce qui fait d'un champ de facture un vecteur d'attaque sur le poste du
+comptable.
+
+**19** portent sur les courriels. La moitié vérifie la composition du message :
 qu'un sujet accentué se recolle exactement après découpage en mots encodés,
 qu'aucune ligne du corps ne commence par un point — celle-là terminerait la
 transmission SMTP au milieu du message — et qu'un nom d'utilisateur contenant
@@ -946,7 +954,7 @@ port au hasard : accueil, `EHLO`, authentification, enveloppe, `DATA`. Du code
 de protocole écrit à la main auquel personne ne parle jamais est du code de
 protocole dont personne ne sait qu'il est cassé.
 
-Les 12 restants portent sur les délais et sur les deux formats que les exports
+**12** portent sur les délais et sur les deux formats que les exports
 utilisent. Tous sont des **fonctions pures** auxquelles l'instant courant est
 passé en paramètre : un objectif de quatre heures se vérifie en microsecondes
 au lieu de s'attendre, et le résultat ne dépend jamais de l'heure à laquelle la

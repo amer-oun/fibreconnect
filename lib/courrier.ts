@@ -284,9 +284,13 @@ export async function envoyer(lettre: Lettre): Promise<ResultatEnvoi> {
 /* -------------------------------------------------------------------------- */
 
 async function deposerFichier(dossier: string, lettre: Lettre, message: string) {
+  // `turbopackIgnore` : le chemin vient d'une variable d'environnement, donc le
+  // traceur de dépendances ne peut pas le borner et embarquerait tout le projet
+  // dans le bundle de production. Il est calculé à l'exécution, jamais lu à la
+  // compilation — il n'y a rien à tracer.
   const racine = path.isAbsolute(dossier)
     ? dossier
-    : path.join(process.cwd(), dossier);
+    : path.join(/*turbopackIgnore: true*/ process.cwd(), dossier);
   await mkdir(racine, { recursive: true });
 
   const horodatage = new Date().toISOString().replace(/[:.]/g, "-");

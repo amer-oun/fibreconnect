@@ -605,8 +605,7 @@ export async function bilanFinancier(periode?: { debut: Date; fin: Date }) {
     await Promise.all([
       prisma.facture.aggregate({
         where: { statut: { not: "ANNULEE" }, ...filtreFacture },
-        _sum: { montantTotal: true, montantHT: true, montantTva: true },
-        _count: true,
+        _sum: { montantTotal: true, montantTva: true },
       }),
       prisma.paiement.aggregate({
         where: { statut: "CONFIRME", facture: { ...filtreFacture } },
@@ -636,11 +635,8 @@ export async function bilanFinancier(periode?: { debut: Date; fin: Date }) {
   const totalEncaisse = encaisse._sum.montant ?? 0;
 
   return {
-    nombreFactures: facture._count,
     /** Toutes taxes comprises : ce que les abonnés doivent. */
     facture: totalFacture,
-    /** Hors taxes : ce que la société gagne réellement. */
-    chiffreAffairesHT: facture._sum.montantHT ?? 0,
     /** Collectée pour l'État, à reverser. */
     tvaCollectee: facture._sum.montantTva ?? 0,
     encaisse: totalEncaisse,
