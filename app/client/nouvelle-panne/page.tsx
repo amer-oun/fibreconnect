@@ -24,7 +24,7 @@ export default async function PageNouvellePanne() {
     <div className="mx-auto w-full max-w-3xl px-4 py-8 sm:px-6">
       <EntetePage
         titre="Déclarer une panne"
-        description="Votre déclaration part immédiatement chez les techniciens de votre opérateur. Plus votre description est précise, plus l’intervention est rapide."
+        description="Votre déclaration part immédiatement chez les techniciens FibreConnect de votre secteur. Le prix du déplacement vous est annoncé ci-dessous, avant de valider."
       />
 
       {client && (

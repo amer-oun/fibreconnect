@@ -44,7 +44,7 @@ Projet de fin d'études (stage BTP).
 |---|---|
 | **Client** | S'inscrire seul, déclarer une panne avec photo, suivre son avancement étape par étape, l'annuler, **régler sa facture**, noter le technicien une fois l'intervention terminée |
 | **Technicien** | S'inscrire seul (compte à valider), consulter les pannes **de sa zone**, les accepter, les démarrer, rédiger le rapport de clôture avec photo et les pièces facturées, **encaisser les espèces et les remettre à la société**, gérer son profil |
-| **Superviseur** | Piloter l'activité : statistiques, couverture des zones, validation des inscriptions techniciens, attribution des matricules et des zones, affectation manuelle, carte des abonnés, **finances de la société et paie des techniciens** |
+| **Superviseur** | Piloter l'activité : statistiques, couverture des zones, validation des inscriptions techniciens, attribution des matricules et des zones, affectation manuelle, carte des abonnés, **finances de la société** |
 
 ### Pages
 
@@ -55,7 +55,7 @@ Projet de fin d'études (stage BTP).
 /register/technicien            candidature technicien (compte en attente)
 
 /client/dashboard               mes demandes + recherche et filtres
-/client/nouvelle-panne          déclaration, avec photo facultative
+/client/nouvelle-panne          déclaration, prix annoncé, photo facultative
 /client/suivi/[id]              timeline, rapport, facture et paiement, notation
 /client/facture/[id]            la facture en document A4, à imprimer ou en PDF
 /client/profil                  coordonnées, zone, mot de passe
@@ -66,9 +66,9 @@ Projet de fin d'études (stage BTP).
 /technicien/historique          interventions passées, rapports, notes
 /technicien/profil              photo, spécialité, disponibilité, mot de passe
 
-/superviseur/dashboard          statistiques, graphiques, couverture des zones
+/superviseur/dashboard          ce qui appelle une décision : retards, zones, impayés
 /superviseur/interventions      affectation, réaffectation, annulation
-/superviseur/finances           encaissements, remises à confirmer, paie
+/superviseur/finances           encaissements, remises et virements à confirmer, impayés
 /superviseur/factures/[id]      fiche facture : corriger ou annuler
 /superviseur/techniciens        équipe par zone, validation, activation
 /superviseur/techniciens/nouveau  création d'un compte technicien
@@ -98,7 +98,7 @@ Projet de fin d'études (stage BTP).
 
 ## Schéma de la base
 
-Onze tables : six pour l'activité, cinq pour l'argent. SQLite ne supportant pas
+Dix tables : six pour l'activité, quatre pour l'argent. SQLite ne supportant pas
 les `enum` Prisma, les champs `role`, `statutCompte`, `statut`, `priorite`,
 `typePanne`, `zone`, `moyen` et les statuts de facture, de paiement et de
 versement sont des `String` dont les valeurs autorisées sont centralisées dans
@@ -127,7 +127,6 @@ erDiagram
     Technicien  ||--o{ Paiement : "encaisse en espèces"
     Technicien  ||--o{ Versement : "remet"
     Versement   ||--o{ Paiement : "regroupe"
-    Technicien  ||--o{ BulletinPaie : "est payé"
 
     Utilisateur {
         string   id PK
@@ -167,8 +166,6 @@ erDiagram
         string  zone "gouvernorat - regle centrale"
         boolean disponible "defaut true"
         string  photoUrl "nullable"
-        int     salaireBase "millimes - defaut 800000"
-        float   tauxCommission "defaut 0.15"
     }
 
     Intervention {
@@ -231,6 +228,7 @@ erDiagram
         string   moyen "ESPECES|CARTE|VIREMENT|D17"
         string   statut "EN_ATTENTE|CONFIRME|ECHOUE"
         string   reference UK "anti-rejeu"
+        string   detail "nullable - Visa ****4242"
         string   technicienId FK "nullable - especes seulement"
         string   versementId FK "nullable"
         datetime dateCreation
@@ -248,21 +246,6 @@ erDiagram
         string   confirmePar "nullable"
     }
 
-    BulletinPaie {
-        string   id PK
-        string   technicienId FK
-        string   mois "2026-08"
-        boolean  actif "true ou null - unique avec technicienId et mois"
-        int      salaireBase "millimes - fige"
-        float    tauxCommission "fige"
-        int      interventions "fige"
-        int      chiffreAffaires "millimes - fige"
-        int      commission "millimes - fige"
-        int      montantTotal "millimes - fige"
-        datetime dateVersement
-        string   versePar "id superviseur"
-        string   commentaire "nullable"
-    }
 ```
 
 ### Valeurs autorisées
@@ -336,13 +319,12 @@ lien viennent de la même clause SQL (`conditionHorsDelai` dans
 
 ### Export comptable
 
-Le superviseur télécharge trois documents depuis [/superviseur/finances](app/superviseur/finances/page.tsx) :
+Le superviseur télécharge deux documents depuis [/superviseur/finances](app/superviseur/finances/page.tsx) :
 
 | Fichier | Contenu |
 |---|---|
 | `factures-AAAA-MM-JJ.csv` | Le registre complet, de la plus ancienne à la plus récente |
 | `factures-impayees-AAAA-MM-JJ.csv` | Les seules non soldées |
-| `paie-AAAA-MM.csv` | La paie d'un mois : fixe, commission, total, espèces détenues |
 
 Les montants sortent en **nombres nus à virgule décimale** (`105,500`), sans
 unité ni séparateur de milliers : une colonne « Montant » qui ne s'additionne
@@ -350,10 +332,6 @@ pas dans Excel ne sert à rien. Cette virgule suppose un Excel français, ce qui
 est déjà l'hypothèse de [lib/csv.ts](lib/csv.ts) — les deux conventions vont de
 pair, on ne peut pas en changer une seule.
 
-Dans l'export de paie, « Espèces détenues » est la dernière colonne et reste à
-l'écart : ce n'est pas ce que la société doit, c'est ce que le technicien lui
-doit. Qui lit le fichier doit pouvoir additionner « À verser » sans que ce
-chiffre s'invite dans le total.
 
 ---
 
@@ -428,15 +406,21 @@ qui a été annoncé à l'abonné quand il a déclaré sa panne, pas découvert 
 fin. Le technicien ajoute ensuite les pièces remplacées, une par ligne, au
 moment de rédiger son rapport.
 
-| Type de panne | Tarif HT |
-|---|---|
-| Coupure totale | 80,000 DT |
-| Débit faible | 60,000 DT |
-| ONT défectueux | 120,000 DT |
-| Câble endommagé | 150,000 DT |
-| Nouvelle installation | 250,000 DT |
-| Changement de routeur | 100,000 DT |
-| Autre | 70,000 DT |
+| Type de panne | Tarif HT | Payé par l'abonné |
+|---|---|---|
+| Débit faible | 20,000 DT | 24,800 DT |
+| Coupure totale | 25,000 DT | 30,750 DT |
+| Autre | 25,000 DT | 30,750 DT |
+| Changement de routeur | 30,000 DT | 36,700 DT |
+| ONT défectueux | 35,000 DT | 42,650 DT |
+| Câble endommagé | 45,000 DT | 54,550 DT |
+| Nouvelle installation | 60,000 DT | 72,400 DT |
+
+Un abonnement fibre coûte 30 à 60 DT par mois en Tunisie : un dépannage
+facturé plus cher que l'abonnement qu'il répare ne se vend pas. **Le prix est
+affiché sur le formulaire de déclaration**, en face de chaque type de panne et
+détaillé sous le champ, avant que l'abonné ne valide. Un montant découvert à la
+fin de l'intervention ne laisse qu'un recours : la contestation.
 
 ### TVA et droit de timbre
 
@@ -544,9 +528,9 @@ aujourd'hui encore :
 0.1 + 0.2 === 0.30000000000000004
 ```
 
-Sur une facture, personne ne le voit. Sur une paie mensuelle qui additionne deux
-cents commissions, le total cesse de correspondre à la somme des lignes
-affichées au-dessus — et cela ne s'explique pas à un comptable. Les entiers
+Sur une facture, personne ne le voit. Sur un registre qui additionne deux cents
+factures, le total cesse de correspondre à la somme des lignes affichées
+au-dessus — et cela ne s'explique pas à un comptable. Les entiers
 s'additionnent exactement, donc un total est toujours la somme de ce qui est
 imprimé. SQLite n'a de toute façon pas de type décimal.
 
@@ -554,54 +538,24 @@ imprimé. SQLite n'a de toute façon pas de type décimal.
 montant en texte : `formaterMontant` (trois décimales, toujours) et
 `formaterMontantCourt` (pour les graphiques).
 
-### La rémunération du technicien
+### Ce que l'application ne fait pas : la paie
 
-**Fixe + commission** : un salaire de base mensuel (800 DT par défaut) plus un
-pourcentage du montant facturé (15 % par défaut), tous deux réglables par
-technicien. La commission porte sur les interventions **terminées** dans le
-mois, réglées ou non : le travail a été fait, et le recouvrement est l'affaire
-de la société, pas celle du technicien.
+**La rémunération des techniciens n'est pas gérée ici, et c'est délibéré.**
 
-Les espèces détenues sont affichées **à côté** de la paie, jamais déduites.
-Mélanger « ce que nous vous devons » et « ce que vous détenez pour nous » dans
-un seul nombre produit un chiffre sur lequel aucune des deux parties ne peut
-agir — on ne rend pas la moitié d'un salaire.
+Cette application suit les interventions et l'argent que l'**abonné** doit. Ce
+que la société verse à ses salariés relève de sa comptabilité : une paie
+sérieuse suppose des cotisations, des congés, un bulletin conforme — et une
+demi-paie est plus dangereuse qu'aucune, parce qu'on finit par s'y fier.
 
-**Le versement est enregistré, pas seulement calculé.** Quand le superviseur a
-payé, il l'atteste depuis le tableau de paie : un `BulletinPaie` est créé. C'est
-le pendant du `Versement`, dans l'autre sens — celui-ci enregistre l'argent qui
-remonte du technicien vers la société, le bulletin celui qui descend. Sans lui,
-la paie n'était qu'un calcul refait à chaque ouverture de page, et rien
-n'empêchait de payer deux fois le même mois. La contrainte
-`@@unique([technicienId, mois])` est cette garantie, posée en base et non dans
-une vérification applicative — même rôle que `Paiement.reference`.
+Le circuit des espèces reste, lui, entièrement dans l'application : ce n'est pas
+du salaire. Quand l'abonné règle en liquide, cet argent appartient à la société
+dès la première seconde et dort simplement dans la poche du technicien jusqu'à
+la remise. C'est le dernier maillon du paiement de l'abonné, pas le premier de
+la rémunération.
 
-**Un bulletin fige ses montants**, exactement comme une facture fige les siens à
-l'émission. Si une facture du mois est corrigée ensuite, la paie déjà versée ne
-bouge pas : on ne réécrit pas un salaire qui a été payé. Le gel porte sur la
-**ligne entière** et non sur le seul total — mélanger une commission recalculée
-avec un total figé donnerait une ligne où le fixe plus la commission ne font pas
-le total, et un tableau qui ne s'additionne pas est pire qu'un tableau périmé.
-
-L'enregistrement atteste que de l'argent a changé de main hors de l'application.
-Ce qui rend ce geste sûr, c'est qu'il n'est jamais un simple clic dans un
-tableau — le bouton ouvre un panneau qui nomme le technicien, le mois et le
-montant, et redemande confirmation. Cinq lignes d'un tableau se ressemblent, et
-le bouton qui paie Karim est à deux centimètres de celui qui paie Sonia.
-
-**Un bulletin enregistré par erreur s'annule, avec un motif.** Il n'est pas
-supprimé : il garde ses montants, sa date et son auteur, et reçoit la raison de
-son retrait, affichée sous le tableau de paie. Effacer la ligne ne laisserait
-aucune trace d'un mois un jour déclaré payé — la première chose que chercherait
-qui relit les comptes.
-
-L'annulation doit pourtant **libérer le mois**, sinon elle ne répare rien. La
-contrainte d'unicité porte donc sur `(technicien, mois, actif)` où `actif` vaut
-`true` ou `null`, jamais `false` : **SQL considère deux `NULL` comme distincts
-dans un index unique**, si bien que les bulletins annulés s'empilent librement
-sur un même mois tandis que les bulletins en vigueur restent uniques. C'est la
-façon standard d'écrire « unique parmi les lignes actives » quand le moteur ne
-permet pas d'index partiel, ce qui est le cas de Prisma.
+Sur la page « Ma caisse », le technicien voit donc trois chiffres et aucun
+salaire : ce qui reste à encaisser sur ses interventions, ce qu'il détient pour
+la société, et ce que la société a déjà accusé recevoir.
 
 ---
 
@@ -636,10 +590,11 @@ L'application démarre sur <http://localhost:3000>.
 ```bash
 npm run build       # build de production
 npm start           # lancer le build de production
-npm test            # règles métier, argent, délais, pagination (94 tests)
+npm test            # règles métier, argent, délais, pagination (90 tests)
 npm run test:watch  # tests en continu pendant le développement
 npm run lint        # ESLint
 npm run sauvegarde  # instantané horodaté de la base, dans sauvegardes/
+npm run creer-superviseur -- --aide   # créer un compte administrateur
 npx tsc --noEmit    # vérification des types
 npx prisma studio   # explorateur de base de données
 npx prisma db seed  # réinitialiser le jeu de données
@@ -844,17 +799,13 @@ celui qui prétend l'avoir envoyé.
     accepte, le chronomètre s'arrête et ne repart pas.
 17. Le tableau de bord du technicien classe par **temps restant**, pas par
     étiquette de priorité, pour que la liste et les badges disent la même chose.
-18. La paie versée est **enregistrée**, pas seulement calculée. Un mois ne peut
-    pas être payé deux fois (contrainte d'unicité en base), et les montants d'un
-    bulletin sont figés à l'enregistrement. Un bulletin annulé garde sa trace et
-    libère son mois.
 19. Les lignes de facture sont **hors taxes** ; la TVA et le droit de timbre
     s'ajoutent au pied, avec un taux **figé sur la facture**. La commission du
     technicien porte sur le hors-taxes : la TVA n'appartient pas à la société.
 
 ### Ces règles sont testées
 
-`npm test` exécute 91 tests.
+`npm test` exécute 90 tests.
 
 Les 25 premiers portent sur les règles métier et tournent contre une base
 SQLite jetable, construite à partir des vraies migrations : cycle complet des
@@ -881,7 +832,7 @@ dépend jamais de la vitesse de la machine.
 comptée deux fois en parcourant toutes les pages, qu'une URL bricolée à la main
 retombe sur une page valide, et que les liens de page conservent les filtres.
 
-32 portent sur l’argent, et vérifient qu'on ne peut ni en créer ni
+30 portent sur l’argent, et vérifient qu'on ne peut ni en créer ni
 en perdre par les chemins que l'application propose :
 
 - une confirmation de paiement **rejouée trois fois** ne compte l'encaissement
@@ -896,12 +847,6 @@ en perdre par les chemins que l'application propose :
   fois aussi ;
 - une facture ne se corrige ni ne s'annule dès qu'un règlement est confirmé, et
   une facture annulée sort du chiffre d'affaires ;
-- un mois de paie ne se verse pas deux fois, et une facture corrigée après le
-  versement ne réécrit **aucun** des chiffres du bulletin — la ligne figée
-  continue de s'additionner ;
-- annuler un bulletin conserve ses montants, sa date et son motif, **et libère
-  le mois** : la paie peut être enregistrée à nouveau, ce qui vérifie du même
-  coup que l'astuce des `NULL` distincts fonctionne vraiment ;
 - une facture porte son propre taux de TVA et son propre timbre, et son total
   TTC est toujours la somme du hors-taxes, de la TVA et du timbre — y compris
   après une correction.

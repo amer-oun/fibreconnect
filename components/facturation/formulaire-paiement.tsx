@@ -12,6 +12,8 @@ import {
 import { formaterMontant } from "@/lib/monnaie";
 import { Bouton } from "@/components/ui/bouton";
 import { MessageErreur } from "@/components/ui/champs";
+import FormulaireCarte from "@/components/facturation/formulaire-carte";
+import FormulaireD17 from "@/components/facturation/formulaire-d17";
 
 /**
  * Payment screen, in the shape of a real gateway.
@@ -79,8 +81,14 @@ export default function FormulairePaiement({
     );
   }
 
-  async function confirmer(reference: string) {
-    const data = await appeler(`/api/paiements/${reference}/confirmer`);
+  async function confirmer(
+    reference: string,
+    empreinte?: { marque?: string; quatreDerniers?: string; telephone?: string },
+  ) {
+    const data = await appeler(
+      `/api/paiements/${reference}/confirmer`,
+      empreinte,
+    );
     if (!data) return;
     router.refresh();
   }
@@ -118,46 +126,72 @@ export default function FormulairePaiement({
     );
   }
 
-  /* -- Carte et D17 : passerelle simulée ---------------------------------- */
+  /* -- Carte et D17 : la page du prestataire, simulée ---------------------- */
 
   if (etape.nom === "passerelle") {
     return (
-      <div className="rounded-net border border-signal-profond bg-white p-4">
-        <p className="eyebrow">Passerelle de paiement — simulation</p>
-        <p className="mt-2 text-sm text-nuit">
-          Paiement de{" "}
-          <span className="tabulaire font-semibold">
-            {formaterMontant(etape.montant)}
+      <div className="rounded-net border border-signal-profond bg-white">
+        {/* Le bandeau reste en haut, avant les champs : quelqu'un qui commence
+            à taper un numéro de carte doit avoir lu qu'il est sur une
+            simulation, pas l'apprendre après. */}
+        <p className="border-b border-trait bg-ivoire px-4 py-2.5 text-xs text-ardoise">
+          <span className="font-semibold text-nuit">
+            Passerelle de paiement — simulation.
           </span>{" "}
-          par {MOYEN_PAIEMENT_LABELS[etape.moyen].toLowerCase()}, référence{" "}
-          <span className="font-mono text-xs">{etape.reference}</span>.
-        </p>
-        <p className="mt-2 text-xs text-ardoise">
-          Aucun argent ne circule : cette étape remplace la page du prestataire
-          bancaire, qui n’est pas raccordé dans cette version.
+          Aucun argent ne circule et aucune carte n’est débitée : cette page
+          remplace celle du prestataire bancaire, qui n’est pas raccordé dans
+          cette version.
         </p>
 
-        {erreur && (
-          <div className="mt-3">
-            <MessageErreur>{erreur}</MessageErreur>
+        <div className="p-4">
+          <p className="text-sm text-nuit">
+            Paiement de{" "}
+            <span className="tabulaire font-semibold">
+              {formaterMontant(etape.montant)}
+            </span>{" "}
+            par {MOYEN_PAIEMENT_LABELS[etape.moyen].toLowerCase()} · référence{" "}
+            <span className="font-mono text-xs">{etape.reference}</span>
+          </p>
+
+          <div className="mt-4">
+            {etape.moyen === "CARTE" ? (
+              <FormulaireCarte
+                montantLibelle={formaterMontant(etape.montant)}
+                enCours={enCours}
+                onValider={(empreinte) =>
+                  confirmer(etape.reference, {
+                    marque: empreinte.marque,
+                    quatreDerniers: empreinte.quatreDerniers,
+                  })
+                }
+              />
+            ) : (
+              <FormulaireD17
+                montantLibelle={formaterMontant(etape.montant)}
+                enCours={enCours}
+                onValider={(telephone) =>
+                  confirmer(etape.reference, { telephone })
+                }
+              />
+            )}
           </div>
-        )}
 
-        <div className="mt-4 flex flex-wrap gap-2">
-          <Bouton
-            variante="signal"
-            disabled={enCours}
-            onClick={() => confirmer(etape.reference)}
-          >
-            {enCours ? "Traitement…" : "Confirmer le paiement"}
-          </Bouton>
-          <Bouton
-            variante="secondaire"
-            disabled={enCours}
-            onClick={() => abandonner(etape.reference)}
-          >
-            Abandonner
-          </Bouton>
+          {erreur && (
+            <div className="mt-3">
+              <MessageErreur>{erreur}</MessageErreur>
+            </div>
+          )}
+
+          <div className="mt-3">
+            <Bouton
+              variante="discret"
+              taille="petit"
+              disabled={enCours}
+              onClick={() => abandonner(etape.reference)}
+            >
+              Abandonner le paiement
+            </Bouton>
+          </div>
         </div>
       </div>
     );

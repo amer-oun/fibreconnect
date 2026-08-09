@@ -2,8 +2,6 @@ import { Prisma } from "@prisma/client";
 
 import { prisma } from "@/lib/prisma";
 import { ErreurMetier } from "@/lib/interventions";
-import { partDe } from "@/lib/monnaie";
-import { bornesDuMois } from "@/lib/dates";
 import {
   MOYENS_EN_LIGNE,
   TYPE_PANNE_LABELS,
@@ -21,9 +19,13 @@ import {
  * intervention. Card, transfer and D17 reach the company directly. Cash is the
  * exception — the subscriber hands it to the technician on site, so that
  * payment carries a `technicienId` and turns into a debt the technician settles
- * later by remitting the money (`Versement`). Nothing here ever pays a
- * technician: that is payroll, at the bottom of this file, and it is a separate
- * flow with its own rules (fixed salary + commission).
+ * later by remitting the money (`Versement`).
+ *
+ * **Nothing here ever pays a technician.** Salaries are the company's own
+ * accounting, not this application's business: it follows interventions and
+ * what the *subscriber* owes, and stops where payroll begins. The cash circuit
+ * is not an exception to that — money in a technician's pocket belongs to the
+ * company, and remitting it is the last step of the subscriber's payment.
  *
  * Every amount is an integer number of millimes — see lib/monnaie.ts.
  */
@@ -444,7 +446,14 @@ export async function ouvrirPaiement({
  * Le virement reste volontairement EN_ATTENTE jusqu'à ce que le superviseur
  * confirme l'avoir vu sur le compte : annoncer un virement n'est pas le faire.
  */
-export async function confirmerPaiement(reference: string) {
+export async function confirmerPaiement(
+  reference: string,
+  /**
+   * Ce qui identifie le moyen sur le reçu, déjà composé par la route.
+   * Jamais un numéro complet : voir le schéma.
+   */
+  detail?: string | null,
+) {
   return prisma.$transaction(async (tx) => {
     const paiement = await tx.paiement.findUnique({
       where: { reference },
@@ -463,7 +472,11 @@ export async function confirmerPaiement(reference: string) {
 
     await tx.paiement.update({
       where: { id: paiement.id },
-      data: { statut: "CONFIRME", dateConfirmation: new Date() },
+      data: {
+        statut: "CONFIRME",
+        dateConfirmation: new Date(),
+        ...(detail ? { detail } : {}),
+      },
     });
 
     await reglerSiSoldee(tx, paiement.factureId);
@@ -645,288 +658,6 @@ export async function bilanFinancier(periode?: { debut: Date; fin: Date }) {
 }
 
 /* -------------------------------------------------------------------------- */
-/* Paie des techniciens : fixe + commission                                   */
-/* -------------------------------------------------------------------------- */
-
-export type LignePaie = {
-  technicienId: string;
-  matricule: string | null;
-  nom: string;
-  zone: string;
-  salaireBase: number;
-  tauxCommission: number;
-  /** Nombre d'interventions terminées sur la période. */
-  interventions: number;
-  /** Montant facturé sur ces interventions, en millimes. */
-  chiffreAffaires: number;
-  commission: number;
-  total: number;
-  /** Espèces encore détenues par le technicien, en millimes. */
-  especesEnMain: number;
-  /**
-   * Bulletin déjà enregistré pour ce mois, ou `null`.
-   *
-   * Quand il existe, **tous les champs chiffrés de cette ligne viennent de lui**
-   * et non du calcul du jour : une facture du mois corrigée après coup ne
-   * réécrit pas un salaire déjà payé.
-   *
-   * Le gel porte sur la ligne entière, pas seulement sur le total. Mélanger une
-   * commission recalculée avec un total figé donnerait une ligne où le fixe
-   * plus la commission ne font pas le total — un tableau qui ne s'additionne
-   * pas est pire qu'un tableau périmé.
-   */
-  bulletin: {
-    id: string;
-    dateVersement: Date;
-    commentaire: string | null;
-  } | null;
-};
-
-/** Clé de mois utilisée par `BulletinPaie.mois` : `2026-08`. */
-export function cleDuMois(debut: Date): string {
-  return `${debut.getFullYear()}-${String(debut.getMonth() + 1).padStart(2, "0")}`;
-}
-
-/**
- * Payroll for a period: fixed salary plus a commission on what the technician
- * actually billed.
- *
- * The commission is based on invoices *emitted* for interventions closed in the
- * period, not on invoices *paid*. A technician who did the job is owed for it
- * whether or not the subscriber has settled yet — chasing payment is the
- * company's job, not theirs.
- *
- * `especesEnMain` is reported alongside but never deducted: mixing "we owe you"
- * with "you are holding our cash" in one figure produces a number that means
- * nothing on either side. They are two accounts, shown side by side.
- */
-export async function paieDuMois(debut: Date, fin: Date): Promise<LignePaie[]> {
-  const mois = cleDuMois(debut);
-
-  const [techniciens, bulletins] = await Promise.all([
-    prisma.technicien.findMany({
-      where: { utilisateur: { statutCompte: "ACTIF" } },
-      select: {
-        id: true,
-        matricule: true,
-        zone: true,
-        salaireBase: true,
-        tauxCommission: true,
-        utilisateur: { select: { nom: true, prenom: true } },
-      },
-      orderBy: { matricule: "asc" },
-    }),
-    // Seuls les bulletins en vigueur comptent : un bulletin annulé laisse le
-    // mois « à verser », ce qui est exactement le but de l'annulation.
-    prisma.bulletinPaie.findMany({ where: { mois, actif: true } }),
-  ]);
-
-  const parTechnicien = new Map(bulletins.map((b) => [b.technicienId, b]));
-
-  const lignes = await Promise.all(
-    techniciens.map(async (t) => {
-      const bulletin = parTechnicien.get(t.id) ?? null;
-      const factures = await prisma.facture.findMany({
-        where: {
-          statut: { not: "ANNULEE" },
-          intervention: {
-            technicienId: t.id,
-            statut: "TERMINEE",
-            dateFin: { gte: debut, lte: fin },
-          },
-        },
-        select: { montantHT: true },
-      });
-
-      /*
-       * La commission porte sur le HORS TAXES.
-       *
-       * La TVA et le droit de timbre sont encaissés pour le compte de l'État :
-       * ils transitent par la société sans jamais lui appartenir. Commissionner
-       * dessus reviendrait à payer le technicien sur de l'argent que
-       * l'entreprise doit reverser.
-       */
-      const chiffreAffaires = factures.reduce((s, f) => s + f.montantHT, 0);
-      const commission = partDe(chiffreAffaires, t.tauxCommission);
-
-      /*
-       * Une fois la paie versée, le bulletin remplace le calcul du jour — en
-       * bloc. Le gel est fait ici, une fois, plutôt qu'à chaque endroit qui
-       * affiche une paie : un appelant qui oublierait de le faire produirait
-       * une ligne où le fixe plus la commission ne font pas le total.
-       */
-      const calcul = {
-        salaireBase: t.salaireBase,
-        tauxCommission: t.tauxCommission,
-        interventions: factures.length,
-        chiffreAffaires,
-        commission,
-        total: t.salaireBase + commission,
-      };
-      const fige = bulletin
-        ? {
-            salaireBase: bulletin.salaireBase,
-            tauxCommission: bulletin.tauxCommission,
-            interventions: bulletin.interventions,
-            chiffreAffaires: bulletin.chiffreAffaires,
-            commission: bulletin.commission,
-            total: bulletin.montantTotal,
-          }
-        : calcul;
-
-      return {
-        technicienId: t.id,
-        matricule: t.matricule,
-        nom: `${t.utilisateur.prenom} ${t.utilisateur.nom}`,
-        zone: t.zone,
-        ...fige,
-        especesEnMain: await especesEnMain(t.id),
-        bulletin: bulletin
-          ? {
-              id: bulletin.id,
-              dateVersement: bulletin.dateVersement,
-              commentaire: bulletin.commentaire,
-            }
-          : null,
-      } satisfies LignePaie;
-    }),
-  );
-
-  return lignes;
-}
-
-/**
- * Records that a month's pay has actually been handed over to a technician.
- *
- * The amount is recomputed here and never taken from the request: the payroll
- * table is on screen when the button is pressed, so a posted figure would be
- * one the browser could edit before sending — the same reason the cash
- * remittance totals itself server-side.
- *
- * Every figure is copied into the slip rather than referenced. The rate or the
- * base salary can change later, a month's invoice can be corrected; none of it
- * should reach back and rewrite a salary already paid. A slip reads the same in
- * five years as on the day it was issued.
- *
- * Terminal by design, like acknowledging a cash remittance: it attests that
- * money changed hands outside the application. What keeps that safe is the
- * confirmation step in the interface, never a single click in a table row.
- */
-export async function verserPaie({
-  technicienId,
-  mois,
-  superviseurId,
-  commentaire,
-}: {
-  technicienId: string;
-  /** `2026-08`. */
-  mois: string;
-  superviseurId: string;
-  commentaire?: string | null;
-}) {
-  const { debut, fin } = bornesDuMois(mois);
-  const lignes = await paieDuMois(debut, fin);
-  const ligne = lignes.find((l) => l.technicienId === technicienId);
-
-  if (!ligne) {
-    throw new ErreurMetier(
-      "Ce technicien n’a pas de paie à verser pour ce mois.",
-      404,
-    );
-  }
-  if (ligne.bulletin) {
-    throw new ErreurMetier("La paie de ce mois a déjà été versée.");
-  }
-
-  try {
-    return await prisma.bulletinPaie.create({
-      data: {
-        technicienId,
-        mois: cleDuMois(debut),
-        salaireBase: ligne.salaireBase,
-        tauxCommission: ligne.tauxCommission,
-        interventions: ligne.interventions,
-        chiffreAffaires: ligne.chiffreAffaires,
-        commission: ligne.commission,
-        montantTotal: ligne.total,
-        versePar: superviseurId,
-        commentaire: commentaire ?? null,
-      },
-    });
-  } catch (erreur) {
-    // Deux enregistrements simultanes : la contrainte d'unicite tranche, et
-    // c'est elle qui garantit qu'un mois n'est jamais paye deux fois.
-    if (
-      erreur instanceof Prisma.PrismaClientKnownRequestError &&
-      erreur.code === "P2002"
-    ) {
-      throw new ErreurMetier("La paie de ce mois a déjà été versée.");
-    }
-    throw erreur;
-  }
-}
-
-/**
- * Cancels a payroll slip recorded by mistake.
- *
- * The slip is **not deleted**: it keeps its figures, its date and its author,
- * and gains the reason it was withdrawn. Erasing the row would leave no trace
- * of a month that was once declared paid, which is the one thing anyone
- * reviewing the accounts would want to see.
- *
- * Setting `actif` to `null` releases the month — cancelled slips no longer
- * collide on the unique index, so the pay can be recorded again once the
- * mistake is understood. See the schema for why `null` and not `false`.
- */
-export async function annulerBulletinPaie({
-  bulletinId,
-  superviseurId,
-  motif,
-}: {
-  bulletinId: string;
-  superviseurId: string;
-  motif: string;
-}) {
-  const { count } = await prisma.bulletinPaie.updateMany({
-    where: { id: bulletinId, actif: true },
-    data: {
-      actif: null,
-      motifAnnulation: motif,
-      dateAnnulation: new Date(),
-      annulePar: superviseurId,
-    },
-  });
-
-  if (count === 0) {
-    throw new ErreurMetier(
-      "Ce bulletin n’existe pas ou a déjà été annulé.",
-      404,
-    );
-  }
-}
-
-/** Bulletins annulés d'un mois, pour que la trace reste lisible à l'écran. */
-export async function bulletinsAnnules(mois: string) {
-  return prisma.bulletinPaie.findMany({
-    where: { mois, actif: null },
-    orderBy: { dateAnnulation: "desc" },
-    select: {
-      id: true,
-      montantTotal: true,
-      dateVersement: true,
-      dateAnnulation: true,
-      motifAnnulation: true,
-      technicien: {
-        select: {
-          matricule: true,
-          utilisateur: { select: { nom: true, prenom: true } },
-        },
-      },
-    },
-  });
-}
-
-/* -------------------------------------------------------------------------- */
 /* Lectures partagees                                                         */
 /* -------------------------------------------------------------------------- */
 
@@ -952,6 +683,7 @@ export const selectionFacture = {
       moyen: true,
       statut: true,
       reference: true,
+      detail: true,
       dateCreation: true,
       dateConfirmation: true,
       technicien: {

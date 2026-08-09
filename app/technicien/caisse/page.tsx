@@ -5,12 +5,8 @@ import { prisma } from "@/lib/prisma";
 import { exigerRole } from "@/lib/session";
 import { ACCENTS, STATUT_VERSEMENT_LABELS, libelleTypePanne } from "@/lib/constants";
 import { formaterMontant } from "@/lib/monnaie";
-import { bornesDuMois, formaterDateHeure } from "@/lib/dates";
-import {
-  especesEnMain,
-  paieDuMois,
-  restesAPayer,
-} from "@/lib/facturation";
+import { formaterDateHeure } from "@/lib/dates";
+import { especesEnMain, restesAPayer } from "@/lib/facturation";
 import {
   EntetePage,
   EtatVide,
@@ -25,12 +21,15 @@ import FormulaireVersement from "@/components/facturation/formulaire-versement";
 export const metadata: Metadata = { title: "Ma caisse" };
 
 /**
- * The technician's money page.
+ * The technician's cash page.
  *
- * Two accounts, deliberately never merged into one figure: what the company
- * owes for the month (fixed salary + commission), and what the technician is
- * holding on the company's behalf. Netting them would produce a number nobody
- * could act on — you cannot hand back half a salary.
+ * Only company money passes through here: what subscribers still owe on his
+ * interventions, what he has collected in cash and not yet handed back, and
+ * what the company has acknowledged receiving.
+ *
+ * **Nothing about his salary.** What the company pays its employees is its own
+ * accounting, and he knows his own payslip better than this application ever
+ * will. Cash in his pocket is a different thing entirely — it is not his.
  */
 export default async function PageCaisse() {
   const utilisateur = await exigerRole("TECHNICIEN");
@@ -41,8 +40,6 @@ export default async function PageCaisse() {
       id: true,
       matricule: true,
       zone: true,
-      salaireBase: true,
-      tauxCommission: true,
     },
   });
 
@@ -57,18 +54,7 @@ export default async function PageCaisse() {
     );
   }
 
-  /*
-   * La rémunération vient de `paieDuMois`, la même fonction que la page
-   * Finances du superviseur — jamais d'un calcul refait ici.
-   *
-   * Ce fut d'abord un second calcul, et il a divergé le jour où la TVA est
-   * arrivée : la commission portait encore sur le TTC côté technicien et déjà
-   * sur le hors-taxes côté superviseur. Deux écrans qui annoncent deux salaires
-   * différents pour le même mois sont pires que pas d'écran du tout.
-   */
-  const { debut: debutDuMois, fin: finDuMois } = bornesDuMois(null);
-
-  const [aEncaisser, versements, paie, enMain] = await Promise.all([
+  const [aEncaisser, versements, enMain] = await Promise.all([
     // Factures de ses interventions qui ne sont pas soldees.
     prisma.facture.findMany({
       where: {
@@ -109,56 +95,43 @@ export default async function PageCaisse() {
         dateConfirmation: true,
       },
     }),
-    paieDuMois(debutDuMois, finDuMois),
     especesEnMain(technicien.id),
   ]);
 
   const soldes = await restesAPayer(prisma, aEncaisser);
-
-  // Sa propre ligne dans la paie du mois. Absente si son compte vient d'être
-  // validé et qu'aucune paie ne le concerne encore.
-  const ligne = paie.find((l) => l.technicienId === technicien.id);
-  const chiffreAffaires = ligne?.chiffreAffaires ?? 0;
-  const commission = ligne?.commission ?? 0;
-  const remuneration = ligne?.total ?? technicien.salaireBase;
+  const resteTotal = [...soldes.values()].reduce((s, m) => s + m, 0);
+  const totalRemis = versements
+    .filter((v) => v.statut === "CONFIRME")
+    .reduce((s, v) => s + v.montant, 0);
 
   return (
     <div className="mx-auto w-full max-w-5xl px-4 py-8 sm:px-6">
       <EntetePage
         surtitre={`${technicien.matricule ?? "FibreConnect"} · zone ${technicien.zone}`}
         titre="Ma caisse"
-        description="Les factures de vos interventions, les espèces que vous détenez pour la société, et votre rémunération du mois."
+        description="Les factures de vos interventions et les espèces que vous détenez pour le compte de la société."
       />
 
-      <div className="mb-8 grid gap-x-6 gap-y-5 sm:grid-cols-2 lg:grid-cols-4">
+      {/* Ce que le technicien doit à la société, et ce qu'il lui reste à
+          encaisser. Rien sur son salaire : ce n'est pas le sujet de cette
+          application, et il le connaît mieux qu'elle. */}
+      <div className="mb-8 grid gap-x-6 gap-y-5 sm:grid-cols-3">
         <Indicateur
           libelle="Espèces en main"
           valeur={formaterMontant(enMain)}
-          precision={
-            enMain > 0 ? "À remettre à la société" : "Rien à remettre"
-          }
+          precision={enMain > 0 ? "À remettre à la société" : "Rien à remettre"}
           accent={enMain > 0 ? ACCENTS.attention : ACCENTS.neutre}
         />
         <Indicateur
-          libelle="Facturé ce mois-ci"
-          valeur={formaterMontant(chiffreAffaires)}
-          precision={`hors taxes · ${ligne?.interventions ?? 0} intervention${(ligne?.interventions ?? 0) > 1 ? "s" : ""} terminée${(ligne?.interventions ?? 0) > 1 ? "s" : ""}`}
-          accent={ACCENTS.info}
+          libelle="À encaisser"
+          valeur={formaterMontant(resteTotal)}
+          precision={`${aEncaisser.length} facture${aEncaisser.length > 1 ? "s" : ""} non réglée${aEncaisser.length > 1 ? "s" : ""}`}
+          accent={resteTotal > 0 ? ACCENTS.info : ACCENTS.neutre}
         />
         <Indicateur
-          libelle="Commission"
-          valeur={formaterMontant(commission)}
-          precision={`${Math.round(technicien.tauxCommission * 100)} % du montant facturé hors taxes`}
-          accent={ACCENTS.signal}
-        />
-        <Indicateur
-          libelle="Rémunération du mois"
-          valeur={formaterMontant(remuneration)}
-          precision={
-            ligne?.bulletin
-              ? `Versée le ${formaterDateHeure(ligne.bulletin.dateVersement)}`
-              : `Fixe ${formaterMontant(technicien.salaireBase)} + commission`
-          }
+          libelle="Remises confirmées"
+          valeur={formaterMontant(totalRemis)}
+          precision="Reçues par la société"
           accent={ACCENTS.succes}
         />
       </div>

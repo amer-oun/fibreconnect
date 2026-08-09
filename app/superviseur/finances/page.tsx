@@ -5,18 +5,8 @@ import { prisma } from "@/lib/prisma";
 import { exigerRole } from "@/lib/session";
 import { ACCENTS, libelleTypePanne } from "@/lib/constants";
 import { formaterMontant } from "@/lib/monnaie";
-import {
-  bornesDuMois,
-  formaterDateHeure,
-  libelleDuMois,
-  moisDecale,
-} from "@/lib/dates";
-import {
-  bilanFinancier,
-  bulletinsAnnules,
-  paieDuMois,
-  restesAPayer,
-} from "@/lib/facturation";
+import { formaterDateHeure } from "@/lib/dates";
+import { bilanFinancier, restesAPayer } from "@/lib/facturation";
 import { calculerPagination, lirePage } from "@/lib/pagination";
 import type { ParametresRecherche } from "@/lib/filtres";
 import Pagination from "@/components/ui/pagination";
@@ -31,17 +21,18 @@ import { BadgeFacture } from "@/components/ui/badges";
 import { LienBouton } from "@/components/ui/bouton";
 import BoutonImpression from "@/components/ui/bouton-impression";
 import BoutonConfirmation from "@/components/facturation/bouton-confirmation";
-import VersementPaie from "@/components/facturation/versement-paie";
 
 export const metadata: Metadata = { title: "Finances" };
 
 /**
- * The supervisor's money page — and the reason the supervisor is also the admin.
+ * The supervisor's money page.
  *
- * Everything the company is owed, everything it holds, and everything it owes
- * its technicians, on one screen. Splitting it across three pages would let the
- * one figure that matters — billed but never collected — hide behind a tab
- * nobody opens.
+ * Everything the company has billed, received, and is still owed — on one
+ * screen. Splitting it across three pages would let the one figure that
+ * matters, billed but never collected, hide behind a tab nobody opens.
+ *
+ * Salaries are not here and never were meant to be: what the company pays its
+ * employees is its own accounting, not this application's business.
  */
 export default async function PageFinances({
   searchParams,
@@ -51,14 +42,6 @@ export default async function PageFinances({
   await exigerRole("SUPERVISEUR");
   const parametres = await searchParams;
 
-  const {
-    debut: debutDuMois,
-    fin: finDuMois,
-    cle: moisChoisi,
-  } = bornesDuMois(
-    typeof parametres.mois === "string" ? parametres.mois : undefined,
-  );
-
   // Le registre des impayés grandit tant qu'une facture n'est pas réglée :
   // c'est précisément la liste qu'il ne faut pas tronquer en silence.
   const paginationImpayees = calculerPagination(
@@ -66,7 +49,7 @@ export default async function PageFinances({
     lirePage(parametres),
   );
 
-  const [bilan, remises, virements, impayees, paie, annules] = await Promise.all([
+  const [bilan, remises, virements, impayees] = await Promise.all([
     bilanFinancier(),
     prisma.versement.findMany({
       where: { statut: "EN_ATTENTE" },
@@ -135,25 +118,16 @@ export default async function PageFinances({
         },
       },
     }),
-    paieDuMois(debutDuMois, finDuMois),
-    bulletinsAnnules(moisChoisi),
   ]);
 
   const soldes = await restesAPayer(prisma, impayees);
-  // `paieDuMois` a déjà substitué les montants du bulletin là où la paie a été
-  // versée : rien à arbitrer ici.
-  const masseSalariale = paie.reduce((s, l) => s + l.total, 0);
-  const resteAVerser = paie.filter((l) => !l.bulletin).length;
-
-  const moisPrecedent = moisDecale(debutDuMois, -1);
-  const moisSuivant = moisDecale(debutDuMois, 1);
 
   return (
     <div className="mx-auto w-full max-w-6xl px-4 py-8 sm:px-6">
       <EntetePage
         surtitre="Comptabilité"
         titre="Finances"
-        description="Ce que la société a facturé, ce qu’elle a reçu, ce que ses techniciens détiennent encore, et ce qu’elle leur doit."
+        description="Ce que la société a facturé, ce qu’elle a reçu, et ce que ses techniciens détiennent encore pour son compte."
         actions={
           <>
             <LienBouton
@@ -162,13 +136,6 @@ export default async function PageFinances({
               prefetch={false}
             >
               Exporter les factures
-            </LienBouton>
-            <LienBouton
-              href={`/api/export/paie?mois=${moisChoisi}`}
-              variante="secondaire"
-              prefetch={false}
-            >
-              Exporter la paie
             </LienBouton>
             <BoutonImpression libelle="Imprimer l’état" />
           </>
@@ -382,183 +349,6 @@ export default async function PageFinances({
             etat={paginationImpayees}
             nom="factures"
           />
-        </Panneau>
-
-        {/* Paie ------------------------------------------------------------- */}
-        <Panneau className="zone-impression">
-          <TitrePanneau
-            actions={
-              <span className="flex items-center gap-4">
-                {/* Naviguer d'un mois à l'autre par des liens plutôt qu'un
-                    sélecteur : l'URL porte le mois, donc un état de paie se
-                    partage et s'imprime tel quel. */}
-                <span className="sans-impression flex items-center gap-2 text-xs">
-                  {moisPrecedent && (
-                    <Link
-                      href={`/superviseur/finances?mois=${moisPrecedent}`}
-                      className="text-ardoise underline decoration-signal decoration-2 underline-offset-4"
-                    >
-                      Mois précédent
-                    </Link>
-                  )}
-                  {moisSuivant && (
-                    <Link
-                      href={`/superviseur/finances?mois=${moisSuivant}`}
-                      className="text-ardoise underline decoration-signal decoration-2 underline-offset-4"
-                    >
-                      Mois suivant
-                    </Link>
-                  )}
-                </span>
-                <span className="tabulaire text-sm font-semibold text-nuit">
-                  {formaterMontant(masseSalariale)}
-                </span>
-              </span>
-            }
-          >
-            Paie de {libelleDuMois(debutDuMois)} — fixe + commission
-          </TitrePanneau>
-
-          <div className="overflow-x-auto">
-            <table className="w-full min-w-[58rem] text-sm">
-              <caption className="sr-only">
-                Rémunération des techniciens pour le mois en cours
-              </caption>
-              <thead>
-                <tr className="border-b border-trait text-left">
-                  <th scope="col" className="px-4 py-2.5 eyebrow sm:px-5">
-                    Technicien
-                  </th>
-                  <th scope="col" className="px-4 py-2.5 text-right eyebrow">
-                    Interventions
-                  </th>
-                  <th scope="col" className="px-4 py-2.5 text-right eyebrow">
-                    Facturé
-                  </th>
-                  <th scope="col" className="px-4 py-2.5 text-right eyebrow">
-                    Fixe
-                  </th>
-                  <th scope="col" className="px-4 py-2.5 text-right eyebrow">
-                    Commission
-                  </th>
-                  <th scope="col" className="px-4 py-2.5 text-right eyebrow">
-                    À verser
-                  </th>
-                  <th scope="col" className="px-4 py-2.5 text-right eyebrow">
-                    Espèces détenues
-                  </th>
-                  <th scope="col" className="px-4 py-2.5 text-right eyebrow">
-                    Versement
-                  </th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-trait">
-                {paie.map((ligne) => (
-                  <tr key={ligne.technicienId}>
-                    <td className="px-4 py-3 sm:px-5">
-                      <span className="font-medium text-nuit">{ligne.nom}</span>
-                      <span className="mt-0.5 block font-mono text-xs text-ardoise">
-                        {ligne.matricule ?? "—"} · {ligne.zone}
-                      </span>
-                    </td>
-                    <td className="px-4 py-3 text-right tabulaire whitespace-nowrap text-ardoise">
-                      {ligne.interventions}
-                    </td>
-                    <td className="px-4 py-3 text-right tabulaire whitespace-nowrap text-ardoise">
-                      {formaterMontant(ligne.chiffreAffaires)}
-                    </td>
-                    <td className="px-4 py-3 text-right tabulaire whitespace-nowrap text-ardoise">
-                      {formaterMontant(ligne.salaireBase)}
-                    </td>
-                    <td className="px-4 py-3 text-right tabulaire whitespace-nowrap text-ardoise">
-                      {formaterMontant(ligne.commission)}
-                      <span className="ml-1 text-xs text-brume">
-                        {Math.round(ligne.tauxCommission * 100)} %
-                      </span>
-                    </td>
-                    <td className="px-4 py-3 text-right tabulaire whitespace-nowrap font-semibold text-nuit">
-                      {formaterMontant(ligne.total)}
-                    </td>
-                    <td className="px-4 py-3 text-right tabulaire whitespace-nowrap text-ardoise">
-                      {ligne.especesEnMain > 0
-                        ? formaterMontant(ligne.especesEnMain)
-                        : "—"}
-                    </td>
-                    <td className="px-4 py-3 text-right">
-                      {ligne.bulletin && (
-                        <span className="block text-xs text-valide">
-                          Versée le{" "}
-                          {formaterDateHeure(ligne.bulletin.dateVersement)}
-                          {ligne.bulletin.commentaire && (
-                            <span className="mt-0.5 block text-brume">
-                              {ligne.bulletin.commentaire}
-                            </span>
-                          )}
-                        </span>
-                      )}
-                      <span className="sans-impression mt-1.5 inline-flex justify-end">
-                        <VersementPaie
-                          technicienId={ligne.technicienId}
-                          nom={ligne.nom}
-                          mois={moisChoisi}
-                          libelleMois={libelleDuMois(debutDuMois)}
-                          montant={ligne.total}
-                          bulletinId={ligne.bulletin?.id}
-                        />
-                      </span>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-
-          <p className="border-t border-trait px-4 py-3 text-xs text-ardoise sm:px-5">
-            La commission porte sur les interventions <strong>terminées</strong>{" "}
-            dans le mois, réglées ou non : le travail a été fait, le
-            recouvrement est l’affaire de la société. La colonne « espèces
-            détenues » est une dette du technicien envers l’entreprise, jamais
-            déduite de sa paie.{" "}
-            {resteAVerser > 0
-              ? `${resteAVerser} paie${resteAVerser > 1 ? "s" : ""} de ce mois ${
-                  resteAVerser > 1 ? "restent" : "reste"
-                } à verser.`
-              : "Toutes les paies de ce mois ont été versées."}{" "}
-            L’enregistrement d’un versement fige ses montants : une facture du
-            mois corrigée plus tard ne réécrit pas un salaire déjà payé.
-          </p>
-
-          {/* Un versement annulé laisse sa ligne. Sans elle, un mois un jour
-              déclaré payé disparaîtrait sans laisser de trace — la première
-              chose que chercherait qui relit les comptes. */}
-          {annules.length > 0 && (
-            <div className="border-t border-trait px-4 py-3 sm:px-5">
-              <p className="eyebrow mb-2">Versements annulés</p>
-              <ul className="space-y-2 text-sm">
-                {annules.map((b) => (
-                  <li key={b.id} className="flex flex-wrap items-baseline gap-2">
-                    <span className="font-medium text-nuit">
-                      {b.technicien.utilisateur.prenom}{" "}
-                      {b.technicien.utilisateur.nom}
-                    </span>
-                    <span className="tabulaire text-ardoise line-through">
-                      {formaterMontant(b.montantTotal)}
-                    </span>
-                    <span className="font-mono text-xs text-brume">
-                      enregistré le {formaterDateHeure(b.dateVersement)}
-                      {b.dateAnnulation &&
-                        ` · annulé le ${formaterDateHeure(b.dateAnnulation)}`}
-                    </span>
-                    {b.motifAnnulation && (
-                      <span className="w-full text-xs text-ardoise">
-                        {b.motifAnnulation}
-                      </span>
-                    )}
-                  </li>
-                ))}
-              </ul>
-            </div>
-          )}
         </Panneau>
       </div>
     </div>

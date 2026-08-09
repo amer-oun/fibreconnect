@@ -257,6 +257,11 @@ export default function DocumentFacture({
                   </td>
                   <td className="py-2">
                     {libelleMoyenPaiement(p.moyen)}
+                    {p.detail && (
+                      <span className="ml-1.5 font-mono text-xs text-ardoise">
+                        {p.detail}
+                      </span>
+                    )}
                     {p.statut === "EN_ATTENTE" && (
                       <span className="ml-1.5 text-xs text-ardoise">
                         (en attente de confirmation)

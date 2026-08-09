@@ -17,13 +17,13 @@ datasource db {
 
 /// Compte de connexion, commun aux trois roles.
 model Utilisateur {
-  id         String   @id @default(cuid())
-  email      String   @unique
-  motDePasse String // hache avec bcrypt (10 rounds), jamais en clair
-  role       String // CLIENT | TECHNICIEN | SUPERVISEUR -- voir lib/constants.ts
-  nom        String
-  prenom     String
-  telephone  String
+  id           String   @id @default(cuid())
+  email        String   @unique
+  motDePasse   String // hache avec bcrypt (10 rounds), jamais en clair
+  role         String // CLIENT | TECHNICIEN | SUPERVISEUR -- voir lib/constants.ts
+  nom          String
+  prenom       String
+  telephone    String
   // ACTIF | EN_ATTENTE | DESACTIVE. Seul ACTIF autorise la connexion.
   // EN_ATTENTE : technicien inscrit par lui-meme, pas encore valide.
   statutCompte String   @default("ACTIF")
@@ -88,74 +88,19 @@ model Technicien {
   disponible    Boolean @default(true)
   photoUrl      String?
 
-  // Remuneration : fixe + commission. Montants en MILLIMES (voir lib/monnaie.ts).
-  salaireBase     Int   @default(800000) // 800 DT
-  tauxCommission  Float @default(0.15) // part du montant facture
+  // Ni salaire ni commission ici. La remuneration des salaries est une affaire
+  // interne a la societe, traitee par sa comptabilite. Cette application suit
+  // les interventions et l'argent que l'ABONNE doit ; elle s'arrete la ou
+  // commence la paie. Les especes encaissees restent, elles : ce n'est pas du
+  // salaire, c'est de l'argent de la societe qui dort dans une poche.
 
   utilisateur   Utilisateur    @relation(fields: [utilisateurId], references: [id], onDelete: Cascade)
   interventions Intervention[]
   historiques   Historique[]
   encaissements Paiement[] // especes encaissees pour le compte de la societe
   versements    Versement[]
-  bulletins     BulletinPaie[]
 
   @@index([zone])
-}
-
-/// Paie effectivement versee a un technicien pour un mois donne.
-///
-/// Le pendant du Versement, dans l'autre sens : le Versement enregistre
-/// l'argent qui remonte du technicien vers la societe, le bulletin celui qui
-/// descend. Sans lui, la paie n'etait qu'un calcul refait chaque fois qu'on
-/// ouvrait la page, et rien n'empechait de payer deux fois le meme mois.
-///
-/// `@@unique([technicienId, mois])` est cette garantie, posee en base et non
-/// dans une verification applicative : c'est le meme role que `reference` sur
-/// Paiement, qui empeche de compter deux fois un encaissement rejoue.
-///
-/// Les montants sont FIGES a l'enregistrement, comme ceux d'une facture a son
-/// emission. Si une facture du mois est corrigee ensuite, la paie deja versee
-/// ne bouge pas : on ne reecrit pas un salaire qui a ete paye.
-model BulletinPaie {
-  id           String @id @default(cuid())
-  technicienId String
-  mois         String // "2026-08"
-
-  // Copie des parametres au moment du versement : le taux ou le fixe peuvent
-  // changer plus tard sans rendre les bulletins passes incomprehensibles.
-  salaireBase     Int
-  tauxCommission  Float
-  interventions   Int // nombre d'interventions terminees dans le mois
-  chiffreAffaires Int
-  commission      Int
-  montantTotal    Int // fixe + commission, en millimes
-
-  dateVersement DateTime @default(now())
-  versePar      String // id du superviseur
-  commentaire   String?
-
-  /// `true` tant que le bulletin fait foi, `null` une fois annule. Jamais false.
-  ///
-  /// Cette colonne n'existe que pour la contrainte d'unicite ci-dessous. Un
-  /// bulletin annule doit liberer son mois — c'est tout l'interet de
-  /// l'annulation — sans pour autant effacer la trace de ce qui a ete
-  /// enregistre par erreur.
-  ///
-  /// SQL considere deux NULL comme distincts dans un index unique. Les
-  /// bulletins annules portent donc `null` et peuvent s'empiler autant de fois
-  /// qu'il le faut, tandis que les bulletins en vigueur portent tous `true` et
-  /// restent uniques par (technicien, mois). C'est la facon standard d'ecrire
-  /// « unique parmi les lignes actives » quand le moteur ne propose pas
-  /// d'index partiel, ce qui est le cas de Prisma.
-  actif           Boolean?  @default(true)
-  motifAnnulation String?
-  dateAnnulation  DateTime?
-  annulePar       String? // id du superviseur
-
-  technicien Technicien @relation(fields: [technicienId], references: [id], onDelete: Cascade)
-
-  @@unique([technicienId, mois, actif])
-  @@index([mois])
 }
 
 /// Une panne declaree par un client, puis prise en charge par un technicien.
@@ -214,8 +159,8 @@ model Facture {
   timbreFiscal Int
   montantTotal Int // toutes taxes comprises : c'est ce que l'abonne doit
 
-  statut       String   @default("A_PAYER") // A_PAYER | PAYEE | ANNULEE
-  dateEmission DateTime @default(now())
+  statut       String    @default("A_PAYER") // A_PAYER | PAYEE | ANNULEE
+  dateEmission DateTime  @default(now())
   datePaiement DateTime? // renseignee quand le solde atteint le total
 
   // Derniere rectification par le superviseur : correction des lignes ou
@@ -262,6 +207,12 @@ model Paiement {
   // par la passerelle. Unique pour qu'un rejeu ne compte pas deux fois.
   reference String @unique
 
+  // Ce qui identifie le moyen sur le recu : « Visa ••••4242 », « D17 ••••1234 ».
+  // Compose par le serveur a partir de la marque et des quatre derniers
+  // chiffres — le numero complet n'arrive jamais jusqu'ici et ne doit jamais y
+  // arriver : seul un prestataire de paiement agree a le droit de le conserver.
+  detail String?
+
   // Technicien ayant encaisse les especes. Null pour tout paiement en ligne.
   technicienId String?
   // Versement dans lequel ces especes ont ete reversees. Null tant que le
@@ -287,10 +238,10 @@ model Paiement {
 /// Confondre les deux reviendrait a croire le technicien sur parole sur un
 /// mouvement d'especes, ce qu'aucune comptabilite n'accepte.
 model Versement {
-  id           String @id @default(cuid())
+  id           String  @id @default(cuid())
   technicienId String
   montant      Int // en millimes, somme des paiements rattaches
-  statut       String @default("EN_ATTENTE") // EN_ATTENTE | CONFIRME
+  statut       String  @default("EN_ATTENTE") // EN_ATTENTE | CONFIRME
   commentaire  String?
 
   dateCreation     DateTime  @default(now())

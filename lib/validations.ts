@@ -142,6 +142,23 @@ export const paiementEnLigneSchema = z.object({
   }),
 });
 
+/**
+ * Empreinte du moyen, envoyee a la confirmation d'un paiement en ligne.
+ *
+ * **Aucun numero de carte n'est accepte ici, et il ne faut jamais en ajouter.**
+ * Seuls la marque et les quatre derniers chiffres remontent ; le serveur en
+ * compose le libelle du recu. Conserver un numero complet est reserve aux
+ * prestataires de paiement agrees.
+ */
+export const empreintePaiementSchema = z.object({
+  marque: z.enum(["Visa", "Mastercard"]).optional(),
+  quatreDerniers: z
+    .string()
+    .regex(/^\d{4}$/, "Quatre chiffres attendus.")
+    .optional(),
+  telephone: telephoneTunisien.optional(),
+});
+
 /** Encaissement d'especes par le technicien, en millimes. */
 export const encaissementSchema = z.object({
   montant: z

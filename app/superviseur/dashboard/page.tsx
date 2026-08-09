@@ -16,8 +16,6 @@ import { LienBouton } from "@/components/ui/bouton";
 import BoutonImpression from "@/components/ui/bouton-impression";
 import {
   GraphiqueCharge,
-  GraphiqueStatuts,
-  GraphiqueTypes,
   GraphiqueVolume,
 } from "@/components/graphiques/graphiques-superviseur";
 import SelecteurFenetre from "@/components/graphiques/selecteur-fenetre";
@@ -40,7 +38,7 @@ export default async function TableauDeBordSuperviseur({
     <div className="mx-auto w-full max-w-6xl px-4 py-8 sm:px-6">
       <EntetePage
         titre="Tableau de bord"
-        description="Vue d’ensemble de l’activité de FibreConnect, couverture des zones comprise : charge en cours, délais, qualité perçue."
+        description="Ce qui appelle une décision : pannes sans technicien, délais dépassés, zones sans couverture, argent non recouvré."
         actions={
           <>
             <BoutonImpression libelle="Imprimer le rapport" />
@@ -150,38 +148,15 @@ export default async function TableauDeBordSuperviseur({
         </div>
       )}
 
-      {/* Argent ---------------------------------------------------------- */}
-      <div className="mb-8 grid grid-cols-2 gap-6 lg:grid-cols-4">
-        {/* Le chiffre d'affaires est le HORS TAXES : la TVA transite par la
-            société sans lui appartenir, l'inclure gonflerait ce qu'elle gagne. */}
-        <Indicateur
-          libelle="Chiffre d’affaires"
-          valeur={formaterMontantCourt(bilan.chiffreAffairesHT)}
-          accent={ACCENTS.neutre}
-          precision={`hors taxes · ${bilan.nombreFactures} facture${bilan.nombreFactures > 1 ? "s" : ""}`}
-        />
-        <Indicateur
-          libelle="Encaissé"
-          valeur={formaterMontantCourt(bilan.encaisse)}
-          accent={ACCENTS.succes}
-          precision="règlements confirmés"
-        />
-        <Indicateur
-          libelle="Reste à recouvrer"
-          valeur={formaterMontantCourt(bilan.enAttente)}
-          accent={bilan.enAttente > 0 ? ACCENTS.attention : ACCENTS.neutre}
-          precision="facturé, pas encore payé"
-        />
-        <Indicateur
-          libelle="Espèces chez les techniciens"
-          valeur={formaterMontantCourt(bilan.chezTechniciens)}
-          accent={bilan.chezTechniciens > 0 ? ACCENTS.info : ACCENTS.neutre}
-          precision="reçues, pas encore remises"
-        />
-      </div>
-
-      {/* Chiffres-clés */}
-      <div className="mb-8 grid grid-cols-2 gap-6 lg:grid-cols-4">
+      {/*
+        Six chiffres, pas douze.
+        Chacun répond à une question qu'on se pose en ouvrant cette page :
+        qu'est-ce qui attend quelqu'un, qu'est-ce qui est en cours, tient-on
+        les délais, l'argent rentre-t-il, les abonnés sont-ils contents.
+        Le détail comptable a sa propre page ; le répéter ici n'apprenait rien
+        et noyait ce qui appelle une décision.
+      */}
+      <div className="mb-8 grid grid-cols-2 gap-6 lg:grid-cols-3">
         <Indicateur
           libelle="Sans technicien"
           valeur={stats.enAttente}
@@ -199,49 +174,34 @@ export default async function TableauDeBordSuperviseur({
           precision="acceptées ou démarrées"
         />
         <Indicateur
-          libelle="Taux de résolution"
-          valeur={`${stats.tauxResolution.toFixed(0)} %`}
+          libelle="Délai de prise en charge"
+          valeur={
+            stats.delaiMoyen !== null ? `${stats.delaiMoyen.toFixed(1)} h` : "—"
+          }
+          accent={ACCENTS.info}
+          precision="déclaration → affectation"
+        />
+        <Indicateur
+          libelle="Reste à recouvrer"
+          valeur={formaterMontantCourt(bilan.enAttente)}
+          accent={bilan.enAttente > 0 ? ACCENTS.attention : ACCENTS.neutre}
+          precision="facturé, pas encore payé"
+        />
+        <Indicateur
+          libelle="Techniciens actifs"
+          valeur={`${stats.techniciensActifs}/${stats.nombreTechniciens}`}
           accent={ACCENTS.succes}
-          precision={`${stats.terminees} terminées sur ${stats.total}`}
+          precision={
+            stats.techniciensAValider > 0
+              ? `${stats.techniciensAValider} en attente de validation`
+              : `${stats.nombreClients} abonnés`
+          }
         />
         <Indicateur
           libelle="Note moyenne"
           valeur={stats.noteMoyenne !== null ? stats.noteMoyenne.toFixed(1) : "—"}
           accent={ACCENTS.signal}
-          precision={`${stats.nombreNotes} avis d’abonnés`}
-        />
-      </div>
-
-      <div className="mb-8 grid grid-cols-2 gap-6 lg:grid-cols-4">
-        <Indicateur
-          libelle="Délai de prise en charge"
-          valeur={
-            stats.delaiMoyen !== null ? `${stats.delaiMoyen.toFixed(1)} h` : "—"
-          }
-          precision="déclaration → affectation"
-        />
-        <Indicateur
-          libelle="Durée d’intervention"
-          valeur={
-            stats.dureeMoyenne !== null
-              ? `${stats.dureeMoyenne.toFixed(1)} h`
-              : "—"
-          }
-          precision="démarrage → clôture"
-        />
-        <Indicateur
-          libelle="Techniciens"
-          valeur={`${stats.techniciensActifs}/${stats.nombreTechniciens}`}
-          precision={
-            stats.techniciensAValider > 0
-              ? `${stats.techniciensAValider} en attente de validation`
-              : "comptes actifs"
-          }
-        />
-        <Indicateur
-          libelle="Abonnés"
-          valeur={stats.nombreClients}
-          precision="sur les 3 réseaux"
+          precision={`${stats.nombreNotes} avis · ${stats.tauxResolution.toFixed(0)} % résolues`}
         />
       </div>
 
@@ -255,19 +215,6 @@ export default async function TableauDeBordSuperviseur({
           </div>
         </Panneau>
 
-        <Panneau>
-          <TitrePanneau>Répartition par statut</TitrePanneau>
-          <div className="p-4 sm:p-5">
-            <GraphiqueStatuts donnees={stats.serieStatuts} />
-          </div>
-        </Panneau>
-
-        <Panneau>
-          <TitrePanneau>Types de panne les plus fréquents</TitrePanneau>
-          <div className="p-4 sm:p-5">
-            <GraphiqueTypes donnees={stats.serieTypes} />
-          </div>
-        </Panneau>
 
         <Panneau className="lg:col-span-2">
           <TitrePanneau
@@ -344,56 +291,6 @@ export default async function TableauDeBordSuperviseur({
                   </tr>
                 ))}
               </tbody>
-            </table>
-          </div>
-        </Panneau>
-
-        {/* Table de repli : les mêmes chiffres, lisibles sans couleur. */}
-        <Panneau className="lg:col-span-2">
-          <TitrePanneau>Détail par opérateur</TitrePanneau>
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b border-trait text-left">
-                  <th scope="col" className="px-4 py-2.5 font-display text-xs font-semibold tracking-wide text-ardoise uppercase sm:px-5">
-                    Opérateur
-                  </th>
-                  <th scope="col" className="px-4 py-2.5 text-right font-display text-xs font-semibold tracking-wide text-ardoise uppercase">
-                    Abonnés
-                  </th>
-                  <th scope="col" className="px-4 py-2.5 text-right font-display text-xs font-semibold tracking-wide text-ardoise uppercase sm:px-5">
-                    Interventions
-                  </th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-trait">
-                {stats.repartitionOperateurs.map((operateur) => (
-                  <tr key={operateur.id}>
-                    <th scope="row" className="px-4 py-3 text-left font-medium text-nuit sm:px-5">
-                      {operateur.nom}
-                    </th>
-                    <td className="px-4 py-3 text-right font-mono text-ardoise">
-                      {operateur.clients}
-                    </td>
-                    <td className="px-4 py-3 text-right font-mono text-nuit sm:px-5">
-                      {operateur.interventions}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-              <tfoot>
-                <tr className="border-t-2 border-trait">
-                  <th scope="row" className="px-4 py-3 text-left font-display font-semibold text-nuit sm:px-5">
-                    Total
-                  </th>
-                  <td className="px-4 py-3 text-right font-mono font-medium text-nuit">
-                    {stats.nombreClients}
-                  </td>
-                  <td className="px-4 py-3 text-right font-mono font-medium text-nuit sm:px-5">
-                    {stats.total}
-                  </td>
-                </tr>
-              </tfoot>
             </table>
           </div>
         </Panneau>

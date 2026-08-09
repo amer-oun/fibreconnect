@@ -4,7 +4,6 @@ import { preparerBase, semerJeuDeTest, supprimerBase } from "./aide";
 import { prisma as client } from "@/lib/prisma";
 import { ErreurMetier, changerStatut, creerIntervention } from "@/lib/interventions";
 import {
-  annulerBulletinPaie,
   annulerFacture,
   bilanFinancier,
   confirmerPaiement,
@@ -16,9 +15,7 @@ import {
   encaisserEspeces,
   especesEnMain,
   ouvrirPaiement,
-  paieDuMois,
   resteAPayer,
-  verserPaie,
 } from "@/lib/facturation";
 import {
   TARIFS,
@@ -557,7 +554,7 @@ describe("Rectification d'une facture", () => {
   });
 });
 
-describe("Bilan et paie", () => {
+describe("Bilan de la société", () => {
   it("sépare ce qui est encaissé de ce qui dort chez les techniciens", async () => {
     const bilan = await bilanFinancier();
 
@@ -568,165 +565,6 @@ describe("Bilan et paie", () => {
     // societe ne l'a pas encore recu. Les confondre masquerait le jour ou un
     // technicien cesse de reverser.
     expect(bilan.chezTechniciens).toBeLessThanOrEqual(bilan.encaisse);
-  });
-
-  it("enregistre la paie versée et refuse de payer deux fois le même mois", async () => {
-    const maintenant = new Date();
-    const mois = `${maintenant.getFullYear()}-${String(maintenant.getMonth() + 1).padStart(2, "0")}`;
-
-    const avant = await paieDuMois(
-      new Date(maintenant.getFullYear(), maintenant.getMonth(), 1),
-      new Date(maintenant.getFullYear(), maintenant.getMonth() + 1, 0, 23, 59, 59),
-    );
-    const attendue = avant.find((l) => l.technicienId === jeu.techA.id);
-    expect(attendue?.bulletin).toBeNull();
-
-    const bulletin = await verserPaie({
-      technicienId: jeu.techA.id,
-      mois,
-      superviseurId: "superviseur-de-test",
-      commentaire: "Virement bancaire",
-    });
-
-    // Les montants sont recalculés côté serveur, jamais reçus du client.
-    expect(bulletin.montantTotal).toBe(attendue!.total);
-    expect(bulletin.commission).toBe(attendue!.commission);
-    expect(bulletin.interventions).toBe(attendue!.interventions);
-
-    // Un mois payé deux fois est exactement ce que la contrainte d'unicité
-    // sur (technicien, mois) existe pour empêcher.
-    await expect(
-      verserPaie({
-        technicienId: jeu.techA.id,
-        mois,
-        superviseurId: "superviseur-de-test",
-      }),
-    ).rejects.toBeInstanceOf(ErreurMetier);
-  });
-
-  it("fige les montants du bulletin : une facture corrigée après coup ne réécrit pas un salaire payé", async () => {
-    const maintenant = new Date();
-    const debut = new Date(maintenant.getFullYear(), maintenant.getMonth(), 1);
-    const fin = new Date(
-      maintenant.getFullYear(),
-      maintenant.getMonth() + 1,
-      0,
-      23,
-      59,
-      59,
-    );
-    const mois = `${maintenant.getFullYear()}-${String(maintenant.getMonth() + 1).padStart(2, "0")}`;
-
-    // Une intervention neuve pour le technicien B, puis sa paie versée.
-    const { factureId } = await interventionFacturee({ technicien: jeu.techB });
-    const bulletin = await verserPaie({
-      technicienId: jeu.techB.id,
-      mois,
-      superviseurId: "superviseur-de-test",
-    });
-
-    // Le superviseur corrige ensuite une facture de ce mois, à la hausse.
-    await corrigerFacture({
-      factureId,
-      superviseurId: "superviseur-de-test",
-      motif: "Pièce oubliée à la clôture, ajoutée après contrôle.",
-      lignes: [
-        { designation: "Déplacement", montant: TARIFS.COUPURE_TOTALE },
-        { designation: "Pièce oubliée", montant: 500_000 },
-      ],
-    });
-
-    // Les données sous-jacentes ont bien bougé…
-    const facture = await prisma.facture.findUniqueOrThrow({
-      where: { id: factureId },
-    });
-    expect(facture.montantHT).toBe(TARIFS.COUPURE_TOTALE + 500_000);
-
-    // …et la paie ne bouge pas : on ne réécrit pas un salaire déjà payé.
-    const ligne = (await paieDuMois(debut, fin)).find(
-      (l) => l.technicienId === jeu.techB.id,
-    )!;
-    expect(ligne.total).toBe(bulletin.montantTotal);
-    expect(ligne.chiffreAffaires).toBe(bulletin.chiffreAffaires);
-    expect(ligne.commission).toBe(bulletin.commission);
-    expect(ligne.interventions).toBe(bulletin.interventions);
-
-    // Le gel porte sur la ligne entière : elle continue de s'additionner.
-    expect(ligne.salaireBase + ligne.commission).toBe(ligne.total);
-  });
-
-  it("annuler un bulletin libère le mois sans effacer la trace", async () => {
-    const maintenant = new Date();
-    const debut = new Date(maintenant.getFullYear(), maintenant.getMonth(), 1);
-    const fin = new Date(
-      maintenant.getFullYear(),
-      maintenant.getMonth() + 1,
-      0,
-      23,
-      59,
-      59,
-    );
-    const mois = `${maintenant.getFullYear()}-${String(maintenant.getMonth() + 1).padStart(2, "0")}`;
-
-    // Le technicien A a déjà été payé par un test précédent : on l'annule.
-    const bulletin = await prisma.bulletinPaie.findFirstOrThrow({
-      where: { technicienId: jeu.techA.id, mois, actif: true },
-    });
-
-    await annulerBulletinPaie({
-      bulletinId: bulletin.id,
-      superviseurId: "superviseur-de-test",
-      motif: "Enregistré sur le mauvais technicien.",
-    });
-
-    // La ligne reste, avec ses montants, sa date et son motif.
-    const trace = await prisma.bulletinPaie.findUniqueOrThrow({
-      where: { id: bulletin.id },
-    });
-    expect(trace.actif).toBeNull();
-    expect(trace.montantTotal).toBe(bulletin.montantTotal);
-    expect(trace.dateVersement).toEqual(bulletin.dateVersement);
-    expect(trace.motifAnnulation).toContain("mauvais technicien");
-    expect(trace.dateAnnulation).not.toBeNull();
-
-    // Le mois redevient « à verser »…
-    const ligne = (await paieDuMois(debut, fin)).find(
-      (l) => l.technicienId === jeu.techA.id,
-    )!;
-    expect(ligne.bulletin).toBeNull();
-
-    // …et peut être payé de nouveau : c'est tout l'intérêt de l'annulation.
-    // Deux bulletins annulés coexisteraient sur le même mois sans se heurter,
-    // parce que l'index unique ne retient que les lignes actives.
-    const rejoue = await verserPaie({
-      technicienId: jeu.techA.id,
-      mois,
-      superviseurId: "superviseur-de-test",
-    });
-    expect(rejoue.id).not.toBe(bulletin.id);
-
-    // Une annulation déjà faite ne se refait pas.
-    await expect(
-      annulerBulletinPaie({
-        bulletinId: bulletin.id,
-        superviseurId: "superviseur-de-test",
-        motif: "Deuxième tentative sur le même bulletin.",
-      }),
-    ).rejects.toBeInstanceOf(ErreurMetier);
-  });
-
-  it("commissionne le travail fait, payé ou non", async () => {
-    const debut = new Date(Date.now() - 24 * 3600 * 1000);
-    const fin = new Date(Date.now() + 24 * 3600 * 1000);
-    const paie = await paieDuMois(debut, fin);
-
-    const ligne = paie.find((l) => l.technicienId === jeu.techA.id);
-    expect(ligne).toBeDefined();
-    expect(ligne!.interventions).toBeGreaterThan(0);
-    expect(ligne!.commission).toBe(
-      partDe(ligne!.chiffreAffaires, ligne!.tauxCommission),
-    );
-    expect(ligne!.total).toBe(ligne!.salaireBase + ligne!.commission);
   });
 });
 
@@ -742,8 +580,8 @@ describe("Montants", () => {
     expect(dinarsEnMillimes(0.1) + dinarsEnMillimes(0.2)).toBe(300);
   });
 
-  it("arrondit une commission au millime", () => {
-    expect(partDe(105_500, 0.15)).toBe(15_825);
-    expect(Number.isInteger(partDe(333_333, 0.15))).toBe(true);
+  it("arrondit une part au millime", () => {
+    expect(partDe(105_500, 0.19)).toBe(20_045);
+    expect(Number.isInteger(partDe(333_333, 0.19))).toBe(true);
   });
 });

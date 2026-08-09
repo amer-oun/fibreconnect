@@ -337,22 +337,31 @@ export const TYPE_PANNE_LABELS: Record<TypePanne, string> = {
  * Prix de base d'une intervention, par type de panne, **hors taxes et en
  * millimes** (voir lib/monnaie.ts : 1 DT = 1000 millimes).
  *
- * Le tarif est annoncé au client au moment où il déclare sa panne, pas
+ * Le tarif est annoncé au client **au moment où il déclare sa panne**, pas
  * découvert à la fin : c'est la seule façon honnête de facturer un
- * déplacement. Le technicien peut ajouter les pièces qu'il a remplacées à la
- * clôture, chacune sur sa propre ligne de facture.
+ * déplacement, et le seul moyen d'éviter un litige à chaque facture. Le
+ * formulaire de déclaration affiche le prix en face de chaque type de panne.
+ * Le technicien ajoute ensuite les pièces qu'il a remplacées, chacune sur sa
+ * propre ligne de facture.
  *
  * Toutes les lignes de facture sont hors taxes ; la TVA et le droit de timbre
  * s'ajoutent au pied de la facture (voir `TVA_TAUX` et `TIMBRE_FISCAL`).
+ *
+ * **Ordre de grandeur.** Un abonnement fibre coûte 30 à 60 DT par mois en
+ * Tunisie. Un dépannage facturé plus cher que l'abonnement qu'il répare ne se
+ * vend pas : ces tarifs situent le déplacement entre 20 et 60 DT hors taxes,
+ * soit 24 à 72 DT payés par l'abonné, ce qui est l'ordre de grandeur d'une
+ * intervention à domicile. La grille se relit d'un coup d'œil du moins cher au
+ * plus cher, ce qui aide à voir qu'elle est cohérente.
  */
 export const TARIFS: Record<TypePanne, number> = {
-  COUPURE_TOTALE: 80_000,
-  DEBIT_FAIBLE: 60_000,
-  ONT_DEFECTUEUX: 120_000,
-  CABLE_ENDOMMAGE: 150_000,
-  NOUVELLE_INSTALLATION: 250_000,
-  CHANGEMENT_ROUTEUR: 100_000,
-  AUTRE: 70_000,
+  DEBIT_FAIBLE: 20_000,
+  COUPURE_TOTALE: 25_000,
+  AUTRE: 25_000,
+  CHANGEMENT_ROUTEUR: 30_000,
+  ONT_DEFECTUEUX: 35_000,
+  CABLE_ENDOMMAGE: 45_000,
+  NOUVELLE_INSTALLATION: 60_000,
 };
 
 export function tarifDe(typePanne: string): number {

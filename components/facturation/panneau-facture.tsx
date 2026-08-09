@@ -132,6 +132,7 @@ export default function PanneauFacture({
                   </span>
                   <span className="text-ardoise">
                     {libelleMoyenPaiement(p.moyen)}
+                    {p.detail && ` ${p.detail}`}
                     {p.technicien &&
                       ` — reçues par ${p.technicien.utilisateur.prenom} ${p.technicien.utilisateur.nom}`}
                   </span>

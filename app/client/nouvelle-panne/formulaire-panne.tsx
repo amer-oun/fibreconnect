@@ -6,9 +6,14 @@ import { useRouter } from "next/navigation";
 import {
   PRIORITES,
   PRIORITE_LABELS,
+  TARIFS,
   TYPES_PANNE,
   TYPE_PANNE_LABELS,
+  libelleTypePanne,
+  tarifDe,
+  totauxFacture,
 } from "@/lib/constants";
+import { formaterMontant } from "@/lib/monnaie";
 import { Bouton, LienBouton } from "@/components/ui/bouton";
 import {
   ChampSelect,
@@ -87,19 +92,53 @@ export default function FormulairePanne() {
 
   const restant = 1000 - description.length;
 
+  // Le meme calcul que celui du serveur a la cloture : ce que l'abonne lit ici
+  // est exactement ce qu'il verra sur sa facture, aux pieces pres.
+  const totaux = totauxFacture([{ montant: tarifDe(type) }]);
+
   return (
     <form onSubmit={envoyer} className="flex flex-col gap-6 p-5 sm:p-6" noValidate>
-      <ChampSelect
-        id="typePanne"
-        label="Type de panne"
-        required
-        value={type}
-        onChange={(e) => setType(e.target.value)}
-        options={TYPES_PANNE.map((t) => ({
-          valeur: t,
-          libelle: TYPE_PANNE_LABELS[t],
-        }))}
-      />
+      <div>
+        <ChampSelect
+          id="typePanne"
+          label="Type de panne"
+          required
+          value={type}
+          onChange={(e) => setType(e.target.value)}
+          options={TYPES_PANNE.map((t) => ({
+            valeur: t,
+            // Le prix est dans l'option elle-meme : l'abonne compare les types
+            // et leurs tarifs d'un seul coup d'oeil, sans changer de champ.
+            libelle: `${TYPE_PANNE_LABELS[t]} — ${formaterMontant(
+              totauxFacture([{ montant: TARIFS[t] }]).montantTotal,
+            )}`,
+          }))}
+        />
+
+        {/*
+          Le prix du deplacement, annonce avant de valider.
+          C'est le point le plus important de ce formulaire : un abonne qui
+          decouvre le montant a la fin de l'intervention n'a plus qu'un recours,
+          la contestation. Le lui dire ici coute une phrase et evite un litige
+          par facture.
+        */}
+        <div className="mt-2 rounded-net border border-trait bg-ivoire px-3 py-2.5 text-sm">
+          <p className="flex flex-wrap items-baseline justify-between gap-2">
+            <span className="text-ardoise">
+              Déplacement et main-d’œuvre — {libelleTypePanne(type)}
+            </span>
+            <span className="tabulaire font-semibold text-nuit">
+              {formaterMontant(totaux.montantTotal)}
+            </span>
+          </p>
+          <p className="mt-1 text-xs text-ardoise">
+            {formaterMontant(totaux.montantHT)} hors taxes, TVA{" "}
+            {Math.round(totaux.tauxTva * 100)} % et droit de timbre compris.
+            Les pièces éventuellement remplacées s’ajoutent, et le technicien
+            vous les annonce avant de les poser.
+          </p>
+        </div>
+      </div>
 
       <ChampSelect
         id="priorite"

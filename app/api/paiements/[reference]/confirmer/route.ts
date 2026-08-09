@@ -2,7 +2,8 @@ import { prisma } from "@/lib/prisma";
 import { ErreurMetier } from "@/lib/interventions";
 import { confirmerPaiement } from "@/lib/facturation";
 import { utilisateurConnecte } from "@/lib/session";
-import { reponseOk, traiterErreur } from "@/lib/api";
+import { empreintePaiementSchema } from "@/lib/validations";
+import { lireCorps, reponseOk, traiterErreur } from "@/lib/api";
 
 /**
  * Confirmation d'un paiement en ligne.
@@ -19,7 +20,7 @@ import { reponseOk, traiterErreur } from "@/lib/api";
  *    solder une facture sur declaration.
  */
 export async function POST(
-  _requete: Request,
+  requete: Request,
   { params }: { params: Promise<{ reference: string }> },
 ) {
   try {
@@ -60,7 +61,21 @@ export async function POST(
       }
     }
 
-    await confirmerPaiement(reference);
+    /*
+     * Le libellé du reçu est composé **ici**, à partir de la marque et des
+     * quatre derniers chiffres — jamais repris tel quel du navigateur. Un
+     * texte libre venu du client se retrouverait imprimé sur une facture,
+     * ce qui en ferait un champ d'injection sur un document officiel.
+     */
+    const empreinte = empreintePaiementSchema.parse(await lireCorps(requete));
+    const detail =
+      empreinte.marque && empreinte.quatreDerniers
+        ? `${empreinte.marque} ••••${empreinte.quatreDerniers}`
+        : empreinte.telephone
+          ? `D17 ••••${empreinte.telephone.replace(/\D/g, "").slice(-4)}`
+          : null;
+
+    await confirmerPaiement(reference, detail);
     return reponseOk({ reference });
   } catch (erreur) {
     return traiterErreur(erreur);
