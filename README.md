@@ -807,14 +807,13 @@ Le circuit de l'argent se démontre en trois connexions, sans rien préparer.
 9. Accusez réception de la remise : elle passe en « Reçue par la société » et
    l'indicateur « Espèces chez les techniciens » baisse.
 10. Confirmez le virement : la facture correspondante se solde.
-11. En bas de page, le tableau de paie montre pour chaque technicien son fixe,
-    sa commission sur ce qu'il a facturé ce mois-ci, et — dans une colonne
-    séparée, jamais déduite — les espèces qu'il détient encore.
-12. « Enregistrer le versement » sur une ligne : un panneau nomme le technicien,
-    le mois et le montant, et redemande confirmation. La ligne passe à
-    « Versée le… », et le bouton disparaît — ce mois-là ne peut plus être payé
-    une seconde fois. Suivez « Mois précédent » pour voir un mois entièrement
-    versé, puis exportez la paie en CSV.
+11. « Exporter les factures » produit un CSV que le comptable ouvre directement :
+    les montants y sortent en nombres nus à virgule décimale, une colonne
+    « Montant » qui ne s'additionne pas ne servirait à rien.
+12. Ouvrez une facture non réglée depuis la liste des impayés : tant qu'aucun
+    règlement n'est confirmé, vous pouvez la corriger ou l'annuler avec un
+    motif obligatoire, que l'abonné lira sur son exemplaire. Essayez ensuite
+    sur une facture déjà réglée : c'est refusé.
 
 Essayez aussi de confirmer un virement **depuis le compte de l'abonné** : la
 route le refuse. C'est la société qui constate l'arrivée de l'argent, pas
@@ -831,6 +830,30 @@ celui qui prétend l'avoir envoyé.
 4. Reconnectez-vous avec le compte technicien : la panne de Rania, que personne
    ne voyait, apparaît enfin — et l'alerte de couverture disparaît du tableau
    de bord.
+
+### Démonstration des courriels
+
+Aucun compte d'envoi n'est nécessaire : en mode `fichier`, chaque message part
+dans le dossier `courrier/` à la racine du projet, en `.eml`. Ces fichiers
+s'ouvrent d'un double-clic dans Mail, Outlook ou Thunderbird — ils sont de
+vrais courriels, simplement remis à un disque plutôt qu'à un serveur.
+
+1. Rejouez le scénario principal. À chaque étape — acceptation, démarrage,
+   clôture — un fichier apparaît dans `courrier/`.
+2. Ouvrez celui de la clôture : il porte le rapport du technicien, le détail
+   de la facture ligne par ligne et les deux liens, régler et imprimer.
+3. Depuis `/login`, suivez « Mot de passe oublié ? » et saisissez
+   `nadia.chaabane@example.tn`. Un message arrive dans `courrier/` avec un
+   lien valable une heure.
+4. Saisissez ensuite une adresse qui n'existe pas : **la réponse à l'écran est
+   exactement la même**, et rien n'est déposé dans `courrier/`. C'est
+   volontaire — une réponse différente ferait de ce formulaire un annuaire des
+   abonnés de la société.
+5. Ouvrez le lien, choisissez un mot de passe, connectez-vous avec. Rouvrez le
+   même lien : il annonce « Lien expiré », il ne sert qu'une fois.
+
+> Après la démonstration, `npx prisma db seed` remet le jeu de données — et le
+> mot de passe `Passer123` — dans son état d'origine.
 
 ---
 
