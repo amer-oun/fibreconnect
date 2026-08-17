@@ -47,7 +47,16 @@ const SIGNATURES: { type: string; octets: number[] }[] = [
   { type: "image/png", octets: [0x89, 0x50, 0x4e, 0x47] },
 ];
 
-function typeReel(donnees: Uint8Array, typeDeclare: string) {
+/**
+ * Le type d'un fichier d'après son contenu, ou `null` si ce n'en est aucun.
+ *
+ * Renvoyer `null` plutôt que le type annoncé par le navigateur est le fond de
+ * l'affaire : `File.type` vient du client, qui peut écrire ce qu'il veut. S'y
+ * rabattre laisserait passer n'importe quels octets pourvu qu'ils s'annoncent
+ * `image/jpeg`. Les trois formats acceptés commencent tous par une signature
+ * fixe, donc une image valide ne peut pas tomber ici.
+ */
+function typeReel(donnees: Uint8Array): string | null {
   for (const signature of SIGNATURES) {
     if (signature.octets.every((o, i) => donnees[i] === o)) return signature.type;
   }
@@ -56,7 +65,7 @@ function typeReel(donnees: Uint8Array, typeDeclare: string) {
   if (texte.startsWith("RIFF") && texte.slice(8, 12) === "WEBP") {
     return "image/webp";
   }
-  return typeDeclare;
+  return null;
 }
 
 /**
@@ -75,14 +84,15 @@ export async function enregistrerPhoto(fichier: File): Promise<string> {
   }
 
   const donnees = new Uint8Array(await fichier.arrayBuffer());
-  const type = typeReel(donnees, fichier.type);
-  const extension = TYPES_AUTORISES[type];
+  const type = typeReel(donnees);
 
-  if (!extension) {
+  if (!type) {
     throw new ErreurMetier(
       "Format non accepté. Envoyez une image JPEG, PNG ou WebP.",
     );
   }
+
+  const extension = TYPES_AUTORISES[type];
 
   await mkdir(DOSSIER_TELEVERSEMENTS, { recursive: true });
   const nom = `${randomUUID()}.${extension}`;

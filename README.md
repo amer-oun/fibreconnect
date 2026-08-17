@@ -920,7 +920,7 @@ vrais courriels, simplement remis à un disque plutôt qu'à un serveur.
 
 ### Ces règles sont testées
 
-`npm test` exécute 123 tests.
+`npm test` exécute 134 tests.
 
 **18** portent sur les règles métier et tournent contre une base
 SQLite jetable, construite à partir des vraies migrations : cycle complet des
@@ -988,6 +988,14 @@ pas relisible depuis la base, qu'il ne survive pas à son heure, qu'il ne
 fonctionne pas deux fois — y compris quand deux soumissions partent en même
 temps — qu'une demande n'ouvre rien sur un compte en attente ou désactivé, et
 que demander un lien ne ferme pas la porte de connexion de la personne.
+
+**11** portent sur le téléversement des photos, le seul endroit où des octets
+choisis par un utilisateur atteignent le disque. Ils sont écrits à l'envers eux
+aussi : le type annoncé par le navigateur ne doit **pas** être cru — des octets
+quelconques présentés comme `image/jpeg` sont refusés, seule la signature
+binaire décide —, le nom du fichier écrit ne doit pas venir de l'envoi, et un
+nom arrivant dans une URL ne doit pas pouvoir sortir du dossier (`../../.env`,
+`/etc/passwd`, une extension `.svg` ou `.html`).
 
 **12** portent sur les délais et sur les deux formats que les exports
 utilisent. Tous sont des **fonctions pures** auxquelles l'instant courant est
