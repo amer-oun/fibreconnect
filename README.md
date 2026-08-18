@@ -99,7 +99,7 @@ Open http://localhost:3000
 
 ## Project context
 
-Built as a **PFE (Projet de Fin d'Études)** at Collège LaSalle Tunis, 2026, for a real Tunisian fiber optic subcontractor. The demo dataset simulates a week of operations across four regions with realistic Tunisian names, addresses, and fiber-optic terminology (NRO, PBO, ONT, épissure, réflectométrie).
+Built as a **PFE (Projet de Fin d'Études)** at Collège LaSalle Tunis, 2026, for a real Tunisian fiber optic subcontractor. The full specification — data model, business rules, deadlines, and the money circuit — is in [docs/cahier-des-charges.md](./docs/cahier-des-charges.md) (French). The demo dataset simulates a week of operations across four regions with realistic Tunisian names, addresses, and fiber-optic terminology (NRO, PBO, ONT, épissure, réflectométrie).
 
 ## License
 
