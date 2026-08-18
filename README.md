@@ -4,7 +4,7 @@
 
 <TODO: Add a screenshot here — take one of the dashboard once the app is running. Recommended: drag-and-drop image into a GitHub issue to get a URL, then paste it as: ![Dashboard](URL) >
 
-**🔗 Live demo:** <TODO: paste Vercel/Railway URL here after deployment>
+**🔗 Live demo:** https://fibreconnect.vercel.app/
 **📚 Case study / blog post:** <TODO: optional — link a blog post if you write one>
 
 ---
