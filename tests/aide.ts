@@ -1,22 +1,19 @@
 import { execSync } from "node:child_process";
-import { existsSync, rmSync } from "node:fs";
-import path from "node:path";
 
 /**
  * Test fixtures.
  *
- * Each run builds a disposable SQLite file from the real migrations, so the
+ * Each run rebuilds the disposable database from the real migrations, so the
  * schema under test is exactly the one that ships — not a hand-written copy.
  * DATABASE_URL itself is set in tests/setup.ts, which vitest loads before any
  * test module and therefore before lib/prisma.ts builds its client.
  */
 
-const FICHIER = path.join(process.cwd(), "prisma", "test.db");
-
 export async function preparerBase() {
-  supprimerBase();
-
-  execSync("npx prisma migrate deploy", { stdio: "pipe", env: process.env });
+  execSync("npx prisma migrate reset --force --skip-seed --skip-generate", {
+    stdio: "pipe",
+    env: process.env,
+  });
 
   const { PrismaClient } = await import("@prisma/client");
   return new PrismaClient({
@@ -25,20 +22,11 @@ export async function preparerBase() {
 }
 
 /**
- * Best-effort cleanup. Windows can still hold the SQLite handle for a moment
- * after `$disconnect()`, so a failure here is not a test failure: the file is
- * git-ignored and the next run recreates it from scratch anyway.
+ * Nothing left to erase: a PostgreSQL database is not a file, and the next run
+ * empties it before seeding. Kept so the afterAll hooks that already call it
+ * stay valid.
  */
-export function supprimerBase() {
-  for (const suffixe of ["", "-journal"]) {
-    const fichier = `${FICHIER}${suffixe}`;
-    try {
-      if (existsSync(fichier)) rmSync(fichier, { force: true });
-    } catch {
-      // Encore verrouille : il sera efface au prochain lancement.
-    }
-  }
-}
+export function supprimerBase() {}
 
 type Prisma = Awaited<ReturnType<typeof preparerBase>>;
 
