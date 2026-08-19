@@ -2,6 +2,8 @@
 
 > Intervention management platform for a Tunisian fiber optic subcontractor — built as a final-year project (PFE).
 
+[![CI](https://github.com/amer-oun/fibreconnect/actions/workflows/ci.yml/badge.svg)](https://github.com/amer-oun/fibreconnect/actions/workflows/ci.yml)
+
 <p align="center">
   <img width="900" alt="FibreConnect landing page" src="https://github.com/user-attachments/assets/fed873aa-3eee-4688-bd32-da5ae1576dba" />
 </p>
